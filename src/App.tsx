@@ -98,7 +98,18 @@ export function App() {
             setProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
           }
         } else if (event === 'TRANSACTIONS_CDC' && payload?.new) {
-          setTransactions((prev) => [payload.new as StockTransaction, ...prev]);
+          setProducts((currentProducts) => {
+            const prod = currentProducts.find((p) => p.id === payload.new.product_id);
+            const formattedTx: StockTransaction = {
+              ...(payload.new as StockTransaction),
+              product_name: prod?.name || (payload.new as any).product_name || 'Hardware Product',
+              product_sku: prod?.sku || (payload.new as any).product_sku || '',
+              product_brand: prod?.brand || (payload.new as any).product_brand || '',
+              product_image: prod?.image_url || (payload.new as any).product_image || ''
+            };
+            setTransactions((prev) => [formattedTx, ...prev.filter((t) => t.id !== formattedTx.id)]);
+            return currentProducts;
+          });
         } else {
           // Refresh from central database
           const [prodRes, txRes] = await Promise.all([

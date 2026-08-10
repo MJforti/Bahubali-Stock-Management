@@ -347,58 +347,87 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       )}
 
-      {/* Recent Activity Timeline */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+      {/* Recent Activity Timeline (Live Feed) */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 className="text-base font-bold text-slate-100">
-            Recent Stock Movement Activity
-          </h3>
-          <span className="text-xs text-slate-400 font-medium">
-            Live Feed
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-100">
+              Recent Stock Movement Activity
+            </h3>
+            <span className="px-2 py-0.5 text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30 flex items-center gap-1.5 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Live Feed
+            </span>
+          </div>
+
+          <span className="text-xs text-slate-400 font-mono">
+            {transactions.length} Activity Logs
           </span>
         </div>
 
         <div className="space-y-2.5">
-          {transactions.slice(0, 5).map((tx) => (
-            <div
-              key={tx.id}
-              className="p-3 bg-slate-950 rounded-xl border border-slate-800/80 flex items-center justify-between gap-3"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 font-bold text-xs ${
-                  tx.type === 'IN' 
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                    : tx.type === 'OUT' 
-                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
-                    : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                }`}>
-                  {tx.type === 'IN' ? '+IN' : tx.type === 'OUT' ? '-OUT' : 'ADJ'}
+          {transactions.slice(0, 7).map((tx) => {
+            const matchedProd = products.find((p) => p.id === tx.product_id || p.sku === tx.product_sku);
+            const displayName = matchedProd?.name || tx.product_name || 'Hardware Product';
+            const displayBrand = matchedProd?.brand || tx.product_brand || '';
+            const displayImage = matchedProd?.image_url || tx.product_image || '';
+
+            const timeStr = tx.created_at 
+              ? new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : 'Just now';
+
+            return (
+              <div
+                key={tx.id}
+                className="p-3 bg-slate-950 rounded-xl border border-slate-800/80 hover:border-slate-700 flex items-center justify-between gap-3 transition-all"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {displayImage ? (
+                    <img
+                      src={displayImage}
+                      alt={displayName}
+                      className="w-9 h-9 rounded-lg object-cover bg-slate-900 border border-slate-800 flex-shrink-0"
+                    />
+                  ) : (
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 font-bold text-xs ${
+                      tx.type === 'IN' 
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                        : tx.type === 'OUT' 
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
+                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    }`}>
+                      {tx.type === 'IN' ? '+IN' : tx.type === 'OUT' ? '-OUT' : 'ADJ'}
+                    </div>
+                  )}
+
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-100 truncate">
+                      {displayName}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
+                      {displayBrand && <span className="text-amber-400 font-semibold">{displayBrand} •</span>}
+                      <span>{tx.user_name || 'Admin'}</span>
+                      <span>•</span>
+                      <span className="text-slate-400">{tx.reason || (tx.type === 'IN' ? 'Stock In Addition' : 'Stock Issue')}</span>
+                    </p>
+                  </div>
                 </div>
 
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-200 truncate">
-                    {tx.product_name || 'Hardware Product'}
+                <div className="text-right flex-shrink-0">
+                  <p className={`text-xs font-extrabold ${
+                    tx.type === 'IN' ? 'text-emerald-400' : tx.type === 'OUT' ? 'text-rose-400' : 'text-amber-400'
+                  }`}>
+                    {tx.type === 'IN' ? '+' : tx.type === 'OUT' ? '-' : ''}{tx.quantity} units
                   </p>
-                  <p className="text-[10px] text-slate-400 truncate">
-                    {tx.user_name} • {tx.reason || 'Stock Update'}
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    {tx.previous_stock} → {tx.new_stock} <span className="text-slate-500">({timeStr})</span>
                   </p>
                 </div>
               </div>
-
-              <div className="text-right flex-shrink-0">
-                <p className={`text-xs font-extrabold ${
-                  tx.type === 'IN' ? 'text-emerald-400' : tx.type === 'OUT' ? 'text-rose-400' : 'text-amber-400'
-                }`}>
-                  {tx.type === 'IN' ? '+' : tx.type === 'OUT' ? '-' : ''}{tx.quantity} units
-                </p>
-                <p className="text-[10px] text-slate-400">
-                  {tx.previous_stock} → {tx.new_stock}
-                </p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {transactions.length === 0 && (
-            <p className="text-xs text-slate-500 py-3 text-center">No recent stock transactions recorded yet.</p>
+            <p className="text-xs text-slate-500 py-4 text-center">No stock movement activity recorded yet.</p>
           )}
         </div>
       </div>
