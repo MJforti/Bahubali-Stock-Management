@@ -48,25 +48,63 @@ export async function recordStockMovement(params: {
     throw new Error('Quantity must be greater than zero.');
   }
 
-  let newStock = product.current_stock;
-  if (type === 'IN') {
-    newStock += quantity;
-  } else if (type === 'OUT') {
-    if (product.current_stock < quantity) {
-      throw new Error(`Cannot issue ${quantity} ${product.unit}(s). Current stock is only ${product.current_stock} ${product.unit}(s).`);
-    }
-    newStock -= quantity;
-  } else if (type === 'ADJUSTMENT') {
-    newStock = quantity;
-    if (!reason || reason.trim().length === 0) {
-      throw new Error('A mandatory audit reason is required for manual stock adjustments.');
-    }
+  if (type === 'OUT' && product.current_stock < quantity) {
+    throw new Error(`Cannot issue ${quantity} ${product.unit}(s). Current stock is only ${product.current_stock} ${product.unit}(s).`);
   }
 
-  // 1. Update Product Stock directly in Central Database
+  if (type === 'ADJUSTMENT' && (!reason || reason.trim().length === 0)) {
+    throw new Error('A mandatory audit reason is required for manual stock adjustments.');
+  }
+
+  // 1. ATOMIC SUPABASE RPC CALL
+  try {
+    const { data: rpcProduct, error: rpcError } = await supabase.rpc('record_stock_change', {
+      p_product_id: product.id,
+      p_type: type,
+      p_quantity: quantity,
+      p_reason: reason || (type === 'IN' ? 'Stock In Addition' : 'Stock Out Issue'),
+      p_reference: reference || '',
+      p_user_name: userName || 'Admin'
+    });
+
+    if (!rpcError && rpcProduct) {
+      console.log('✅ Stock change permanently saved via Supabase RPC:', rpcProduct);
+      const updated = rpcProduct as Product;
+      
+      const createdTx: StockTransaction = {
+        id: `tx-${Date.now()}`,
+        product_id: updated.id,
+        type,
+        quantity: type === 'ADJUSTMENT' ? Math.abs(quantity - product.current_stock) : quantity,
+        previous_stock: product.current_stock,
+        new_stock: updated.current_stock,
+        reason: reason || '',
+        reference: reference || '',
+        user_name: userName,
+        created_at: new Date().toISOString(),
+        product_name: updated.name,
+        product_sku: updated.sku,
+        product_image: updated.image_url,
+        product_brand: updated.brand
+      };
+
+      broadcastGlobalSync('STOCK_UPDATE', { productId: updated.id, newStock: updated.current_stock });
+      return { product: updated, transaction: createdTx };
+    } else {
+      console.warn('RPC record_stock_change failed, using fallback updateProduct:', rpcError);
+    }
+  } catch (rpcErr) {
+    console.warn('RPC execution exception, using fallback updateProduct:', rpcErr);
+  }
+
+  // 2. FALLBACK MANUAL UPDATE
+  let newStock = product.current_stock;
+  if (type === 'IN') newStock += quantity;
+  else if (type === 'OUT') newStock -= quantity;
+  else if (type === 'ADJUSTMENT') newStock = quantity;
+
   const updatedProduct = await updateProduct(product.id, { current_stock: newStock }, product.sku);
 
-  // 2. Insert Stock Transaction Log directly in Central Database
   const transactionData = {
     product_id: updatedProduct.id,
     type,
@@ -89,24 +127,19 @@ export async function recordStockMovement(params: {
   };
 
   try {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('stock_transactions')
       .insert([transactionData])
       .select()
       .single();
 
-    if (!error && data) {
-      createdTransaction = {
-        ...createdTransaction,
-        id: data.id
-      };
+    if (data) {
+      createdTransaction = { ...createdTransaction, id: data.id };
     }
   } catch (err: any) {
     console.warn('Supabase stock transaction logging network warning:', err);
   }
 
-  // Instant Real-Time Sync Broadcast
   broadcastGlobalSync('STOCK_UPDATE', { productId: updatedProduct.id, newStock });
-
   return { product: updatedProduct, transaction: createdTransaction };
 }
