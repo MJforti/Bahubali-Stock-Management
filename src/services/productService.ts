@@ -1,6 +1,7 @@
 import { supabase, sendRealtimeBroadcast } from '../lib/supabase';
 import { Product, RealtimeStatus } from '../types/inventory';
 import { INITIAL_PRODUCTS } from '../data/seedData';
+import { broadcastGlobalSync } from './realtimeSync';
 
 const LOCAL_PRODUCTS_KEY = 'bahubali_products_data';
 const CACHE_VERSION_KEY = 'bahubali_cache_v2_uuid';
@@ -89,6 +90,7 @@ export async function createProduct(productData: Omit<Product, 'id' | 'created_a
       if (!error && data) {
         const local = getLocalProducts();
         saveLocalProducts([data, ...local]);
+        broadcastGlobalSync('PRODUCT_CREATE', data);
         return data;
       }
     } catch (err: any) {
@@ -100,6 +102,7 @@ export async function createProduct(productData: Omit<Product, 'id' | 'created_a
   const current = getLocalProducts();
   const updated = [newProduct, ...current];
   saveLocalProducts(updated);
+  broadcastGlobalSync('PRODUCT_CREATE', newProduct);
   return newProduct;
 }
 
@@ -135,6 +138,7 @@ export async function updateProduct(id: string, updates: Partial<Product>, produ
         const freshRes = await supabase.from('products').select('*').order('name', { ascending: true });
         if (freshRes.data && freshRes.data.length > 0) {
           saveLocalProducts(freshRes.data);
+          broadcastGlobalSync('PRODUCT_UPDATE', updatedItem);
           return freshRes.data.find((p) => p.id === updatedItem.id || p.sku === updatedItem.sku) || updatedItem;
         }
       }

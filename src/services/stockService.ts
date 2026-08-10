@@ -2,6 +2,7 @@ import { supabase, localBroadcastChannel, sendRealtimeBroadcast } from '../lib/s
 import { StockTransaction, TransactionType, Product } from '../types/inventory';
 import { INITIAL_TRANSACTIONS } from '../data/seedData';
 import { updateProduct, getLocalProducts } from './productService';
+import { broadcastGlobalSync } from './realtimeSync';
 
 const LOCAL_TRANSACTIONS_KEY = 'bahubali_stock_transactions';
 
@@ -146,6 +147,9 @@ export async function recordStockMovement(params: {
 
   const localTx = getLocalTransactions();
   saveLocalTransactions([createdTransaction, ...localTx]);
+
+  // INSTANT BROADCAST TO ALL CONNECTED DEVICES
+  broadcastGlobalSync('STOCK_UPDATE', { productId: updatedProduct.id, newStock });
 
   return { product: updatedProduct, transaction: createdTransaction };
 }

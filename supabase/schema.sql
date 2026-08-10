@@ -94,6 +94,57 @@ BEGIN
 END;
 $$;
 
+-- 7B. ATOMIC STOCK MOVEMENT RPC FUNCTION FOR SECURE DIRECT DB WRITES
+CREATE OR REPLACE FUNCTION record_stock_change(
+  p_product_id UUID,
+  p_type TEXT,
+  p_quantity NUMERIC,
+  p_reason TEXT DEFAULT '',
+  p_reference TEXT DEFAULT '',
+  p_user_name TEXT DEFAULT 'Admin'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_old_stock NUMERIC;
+  v_new_stock NUMERIC;
+  v_product products%ROWTYPE;
+BEGIN
+  SELECT * INTO v_product FROM products WHERE id = p_product_id FOR UPDATE;
+  
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Product not found';
+  END IF;
+
+  v_old_stock := v_product.current_stock;
+
+  IF p_type = 'IN' THEN
+    v_new_stock := v_old_stock + p_quantity;
+  ELSIF p_type = 'OUT' THEN
+    v_new_stock := v_old_stock - p_quantity;
+  ELSIF p_type = 'ADJUSTMENT' THEN
+    v_new_stock := p_quantity;
+  ELSE
+    v_new_stock := v_old_stock;
+  END IF;
+
+  UPDATE products 
+  SET current_stock = v_new_stock, updated_at = NOW()
+  WHERE id = p_product_id
+  RETURNING * INTO v_product;
+
+  INSERT INTO stock_transactions (
+    product_id, type, quantity, previous_stock, new_stock, reason, reference, user_name
+  ) VALUES (
+    p_product_id, p_type, p_quantity, v_old_stock, v_new_stock, p_reason, p_reference, p_user_name
+  );
+
+  RETURN to_jsonb(v_product);
+END;
+$$;
+
 -- INDEXES FOR FAST SEARCH AND REAL-TIME AGGREGATIONS
 CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);

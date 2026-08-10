@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { BottomNav, ActiveTab } from './components/layout/BottomNav';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -16,41 +16,24 @@ import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } 
 import { fetchProducts, createProduct, updateProduct, getLocalProducts } from './services/productService';
 import { fetchStockTransactions, recordStockMovement, getLocalTransactions } from './services/stockService';
 import { exportInventoryToExcel } from './services/excelService';
-import { supabase, localBroadcastChannel } from './lib/supabase';
+import { setupRealtimeSync } from './services/realtimeSync';
 
 import { SplashScreen } from './components/layout/SplashScreen';
 import { AdminPasscodeModal } from './components/auth/AdminPasscodeModal';
-import { DraftHeaderBar } from './components/admin/DraftHeaderBar';
-import { PublishReviewModal } from './components/admin/PublishReviewModal';
-import { PublishHistoryModal } from './components/admin/PublishHistoryModal';
-import { UnsavedDraftsWarningModal } from './components/admin/UnsavedDraftsWarningModal';
-
-import {
-  ProductDraft,
-  fetchProductDrafts,
-  addProductDraft,
-  discardAllDrafts,
-  publishAllDrafts
-} from './services/draftService';
-import { setupRealtimeSync } from './services/realtimeSync';
+import { ShieldCheck, Activity, Database, Radio } from 'lucide-react';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [userRole, setUserRole] = useState<UserRole>('staff'); // STAFF VIEW BY DEFAULT
-  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('local_demo');
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connected');
   const [searchQuery, setSearchQuery] = useState('');
   const [adminAuthOpen, setAdminAuthOpen] = useState(false);
+  const [lastRealtimeEvent, setLastRealtimeEvent] = useState<string>('Connected to Central DB');
 
-  // Published Inventory State (Staff View Source of Truth)
-  const [publishedProducts, setPublishedProducts] = useState<Product[]>(() => getLocalProducts());
+  // Single Authoritative Products & Transactions State
+  const [products, setProducts] = useState<Product[]>(() => getLocalProducts());
   const [transactions, setTransactions] = useState<StockTransaction[]>(() => getLocalTransactions());
   const [initialLoading, setInitialLoading] = useState<boolean>(() => getLocalProducts().length === 0);
-
-  // Draft System States
-  const [drafts, setDrafts] = useState<ProductDraft[]>([]);
-  const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  const [historyModalOpen, setHistoryModalOpen] = useState(false);
-  const [unsavedWarningOpen, setUnsavedWarningOpen] = useState(false);
 
   // Modal States
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
@@ -67,101 +50,55 @@ export function App() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
-  // Compute Admin Draft View vs Staff Published View
-  const visibleProducts = useMemo(() => {
-    if (userRole === 'staff' || drafts.length === 0) {
-      return publishedProducts;
-    }
-
-    // Apply Admin drafts on top of published inventory for Admin View
-    let draftList = [...publishedProducts];
-    for (const d of drafts) {
-      const payload = d.draft_payload;
-      if (d.action_type === 'CREATE' && payload) {
-        const exists = draftList.some((p) => p.id === payload.id || p.sku === payload.sku);
-        if (!exists) draftList = [payload, ...draftList];
-      } else if ((d.action_type === 'UPDATE' || d.action_type === 'STOCK_MOVEMENT') && payload) {
-        draftList = draftList.map((p) =>
-          p.id === d.product_id || p.sku === payload.sku ? { ...p, ...payload } : p
-        );
-      } else if (d.action_type === 'DELETE') {
-        draftList = draftList.filter((p) => p.id !== d.product_id && p.sku !== payload?.sku);
-      }
-    }
-    return draftList;
-  }, [userRole, publishedProducts, drafts]);
-
-  // Load Initial Data & Drafts
+  // Centralized Single-Source Data Fetcher
   const loadData = useCallback(async () => {
     try {
-      const [prodRes, txRes, draftRes] = await Promise.all([
+      const [prodRes, txRes] = await Promise.all([
         fetchProducts(),
-        fetchStockTransactions(),
-        fetchProductDrafts()
+        fetchStockTransactions()
       ]);
-      setPublishedProducts(prodRes.products);
+      setProducts(prodRes.products);
       setRealtimeStatus(prodRes.realtimeStatus);
       setTransactions(txRes);
-      setDrafts(draftRes);
     } catch (err) {
-      console.error('Error loading inventory data:', err);
+      console.error('Error loading central inventory data:', err);
     } finally {
       setInitialLoading(false);
     }
   }, []);
 
-  // Handle Role Switching & Unsaved Drafts Guard
-  const handleRoleChangeRequest = (role: UserRole) => {
-    if (role === 'admin') {
-      setAdminAuthOpen(true);
-    } else {
-      if (drafts.length > 0) {
-        setUnsavedWarningOpen(true);
-      } else {
-        setUserRole('staff');
-      }
-    }
-  };
-
+  // Real-time Subscriptions Setup
   useEffect(() => {
     loadData();
 
-    // Centralized Dual-Trigger CDC + Broadcast Real-time Subscriptions
     const unsubscribe = setupRealtimeSync(
       async (event, payload) => {
-        console.log(`🌐 Realtime Event [${event}]:`, payload);
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastRealtimeEvent(`${event} at ${timeStr}`);
 
         if (event === 'PRODUCTS_CDC' && payload?.new) {
           if (payload.eventType === 'INSERT') {
-            setPublishedProducts((prev) => {
+            setProducts((prev) => {
               const exists = prev.some((p) => p.id === payload.new.id || p.sku === payload.new.sku);
               return exists ? prev : [payload.new as Product, ...prev];
             });
           } else if (payload.eventType === 'UPDATE') {
-            setPublishedProducts((prev) =>
+            setProducts((prev) =>
               prev.map((p) => (p.id === payload.new.id || p.sku === payload.new.sku ? (payload.new as Product) : p))
             );
           } else if (payload.eventType === 'DELETE' && payload.old) {
-            setPublishedProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
+            setProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
           }
         } else if (event === 'TRANSACTIONS_CDC' && payload?.new) {
           setTransactions((prev) => [payload.new as StockTransaction, ...prev]);
-        } else if (event === 'POLL_TRIGGER') {
-          fetchProducts().then((res) => {
-            if (res.products && res.products.length > 0) {
-              setPublishedProducts(res.products);
-            }
-          });
         } else {
-          // Full fresh data sync from Supabase PostgreSQL central database
-          const [prodRes, txRes, draftRes] = await Promise.all([
+          // Refresh from central database
+          const [prodRes, txRes] = await Promise.all([
             fetchProducts(),
-            fetchStockTransactions(),
-            fetchProductDrafts()
+            fetchStockTransactions()
           ]);
-          setPublishedProducts(prodRes.products);
+          setProducts(prodRes.products);
           setTransactions(txRes);
-          setDrafts(draftRes);
         }
       },
       (status) => {
@@ -180,14 +117,23 @@ export function App() {
   // Keep detail modal updated with latest stock
   useEffect(() => {
     if (selectedProductForDetail) {
-      const updated = visibleProducts.find((p: Product) => p.id === selectedProductForDetail.id);
+      const updated = products.find((p) => p.id === selectedProductForDetail.id);
       if (updated) {
         setSelectedProductForDetail(updated);
       }
     }
-  }, [visibleProducts]);
+  }, [products]);
 
-  // Handler Actions
+  // Role Switcher
+  const handleRoleChangeRequest = (role: UserRole) => {
+    if (role === 'admin') {
+      setAdminAuthOpen(true);
+    } else {
+      setUserRole('staff');
+    }
+  };
+
+  // Direct Stock Movement Handlers
   const handleOpenStockIn = (product: Product | null = null) => {
     setStockModal({ open: true, type: 'IN', product });
   };
@@ -203,37 +149,17 @@ export function App() {
     reason?: string;
     reference?: string;
   }) => {
-    const { product, type, quantity, reason, reference } = params;
-    let newStock = product.current_stock;
-    if (type === 'IN') newStock += quantity;
-    else if (type === 'OUT') newStock -= quantity;
+    const res = await recordStockMovement({
+      product: params.product,
+      type: params.type,
+      quantity: params.quantity,
+      reason: params.reason,
+      reference: params.reference,
+      userName: 'Raj (Admin)'
+    });
 
-    const summary = `${product.name}: ${type === 'IN' ? '+' : '-'}${quantity} ${product.unit}s (${product.current_stock} → ${newStock})`;
-
-    await addProductDraft(
-      product.id,
-      'STOCK_MOVEMENT',
-      {
-        id: product.id,
-        sku: product.sku,
-        name: product.name,
-        current_stock: newStock,
-        transaction: {
-          product_id: product.id,
-          type,
-          quantity,
-          previous_stock: product.current_stock,
-          new_stock: newStock,
-          reason: reason || (type === 'IN' ? 'Stock In Addition' : 'Stock Out Issue'),
-          reference: reference || '',
-          user_name: 'Raj (Admin)'
-        }
-      },
-      summary
-    );
-
-    const freshDrafts = await fetchProductDrafts();
-    setDrafts(freshDrafts);
+    setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
+    setTransactions((prev) => [res.transaction, ...prev]);
   };
 
   const handleStockAdjustmentConfirm = async (params: {
@@ -242,91 +168,42 @@ export function App() {
     quantity: number;
     reason: string;
   }) => {
-    const { product, quantity, reason } = params;
-    const summary = `${product.name}: Stock Adjustment (${product.current_stock} → ${quantity})`;
+    const res = await recordStockMovement({
+      product: params.product,
+      type: 'ADJUSTMENT',
+      quantity: params.quantity,
+      reason: params.reason,
+      userName: 'Raj (Admin)'
+    });
 
-    await addProductDraft(
-      product.id,
-      'STOCK_MOVEMENT',
-      {
-        id: product.id,
-        sku: product.sku,
-        name: product.name,
-        current_stock: quantity,
-        transaction: {
-          product_id: product.id,
-          type: 'ADJUSTMENT',
-          quantity: Math.abs(quantity - product.current_stock),
-          previous_stock: product.current_stock,
-          new_stock: quantity,
-          reason,
-          user_name: 'Raj (Admin)'
-        }
-      },
-      summary
-    );
-
-    const freshDrafts = await fetchProductDrafts();
-    setDrafts(freshDrafts);
+    setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
+    setTransactions((prev) => [res.transaction, ...prev]);
   };
 
   const handleSaveProduct = async (productData: Partial<Product>) => {
     if (productForm.product?.id) {
-      const prod = productForm.product;
-      const summary = `Edit Product: ${productData.name || prod.name}`;
-      await addProductDraft(
-        prod.id,
-        'UPDATE',
-        { id: prod.id, sku: prod.sku, ...productData },
-        summary
-      );
+      const updated = await updateProduct(productForm.product.id, productData);
+      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } else {
-      const newId = `b1000000-0000-0000-0000-${Date.now().toString().padStart(12, '0')}`;
-      const fullProd = {
-        ...productData,
-        id: newId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      const summary = `Add Product: ${productData.name} (${productData.sku})`;
-      await addProductDraft(newId, 'CREATE', fullProd, summary);
+      const created = await createProduct(productData as any);
+      setProducts((prev) => [created, ...prev]);
     }
-
-    const freshDrafts = await fetchProductDrafts();
-    setDrafts(freshDrafts);
   };
 
   const handleUpdateProductCell = async (id: string, updates: Partial<Product>) => {
-    const prod = publishedProducts.find((p) => p.id === id);
-    const summary = `Cell Edit: ${prod?.name || id}`;
-    await addProductDraft(id, 'UPDATE', { id, sku: prod?.sku, ...updates }, summary);
-    const freshDrafts = await fetchProductDrafts();
-    setDrafts(freshDrafts);
+    const updated = await updateProduct(id, updates);
+    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   };
 
   const handleConfirmExcelImport = async (importedProducts: Partial<Product>[]) => {
     for (const prodData of importedProducts) {
-      const newId = `b1000000-0000-0000-0000-${Date.now().toString().padStart(12, '0')}`;
-      const summary = `Import Product: ${prodData.name}`;
-      await addProductDraft(newId, 'CREATE', { ...prodData, id: newId }, summary);
+      const created = await createProduct(prodData as any);
+      setProducts((prev) => [created, ...prev]);
     }
-    const freshDrafts = await fetchProductDrafts();
-    setDrafts(freshDrafts);
-  };
-
-  const handleConfirmPublish = async (note: string) => {
-    await publishAllDrafts('Raj (Admin)', note);
-    setDrafts([]);
-    await loadData();
-  };
-
-  const handleDiscardDrafts = async () => {
-    await discardAllDrafts();
-    setDrafts([]);
   };
 
   if (initialLoading) {
-    return <SplashScreen statusMessage="Connecting to Bahubali Supabase Cloud..." />;
+    return <SplashScreen statusMessage="Connecting to Bahubali Supabase Central Cloud..." />;
   }
 
   return (
@@ -343,16 +220,28 @@ export function App() {
         onQuickSearchClick={() => setActiveTab('products')}
       />
 
-      {/* Admin Mode Persistent Draft Header Bar */}
+      {/* Admin Realtime Debug Diagnostic Header Bar */}
       {userRole === 'admin' && (
-        <DraftHeaderBar
-          drafts={drafts}
-          onOpenReview={() => setReviewModalOpen(true)}
-          onOpenPublishModal={() => setReviewModalOpen(true)}
-          onOpenHistory={() => setHistoryModalOpen(true)}
-          onDiscardDrafts={handleDiscardDrafts}
-          onExitAdmin={() => handleRoleChangeRequest('staff')}
-        />
+        <div className="bg-slate-900 border-b border-amber-500/30 text-slate-100 py-2 px-4 sticky top-16 z-25 backdrop-blur-md">
+          <div className="max-w-7xl mx-auto flex items-center justify-between text-xs">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/30">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                ADMIN MODE (DIRECT DB WRITES)
+              </span>
+              <span className="hidden sm:flex items-center gap-1.5 text-slate-400 font-mono text-[11px]">
+                <Database className="w-3.5 h-3.5 text-blue-400" />
+                Central PostgreSQL DB
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 font-mono text-[11px] text-slate-300">
+              <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <span>Realtime: <strong className="text-emerald-400">ACTIVE</strong></span>
+              <span className="text-slate-500 hidden md:inline">| {lastRealtimeEvent}</span>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Main Page Body */}
@@ -360,7 +249,7 @@ export function App() {
         
         {activeTab === 'dashboard' && (
           <DashboardView
-            products={visibleProducts}
+            products={products}
             transactions={transactions}
             userRole={userRole}
             onOpenStockIn={(prod) => handleOpenStockIn(prod)}
@@ -373,7 +262,7 @@ export function App() {
 
         {activeTab === 'products' && (
           <ProductListView
-            products={visibleProducts}
+            products={products}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             userRole={userRole}
@@ -383,7 +272,7 @@ export function App() {
             onOpenStockOut={(prod) => handleOpenStockOut(prod)}
             onOpenEditProduct={(prod) => setProductForm({ open: true, product: prod })}
             onOpenImportModal={() => setImportModalOpen(true)}
-            onExportExcel={() => exportInventoryToExcel(visibleProducts)}
+            onExportExcel={() => exportInventoryToExcel(products)}
           />
         )}
 
@@ -393,7 +282,7 @@ export function App() {
 
         {activeTab === 'datasheet' && (
           <InventoryDataSheet
-            products={visibleProducts}
+            products={products}
             userRole={userRole}
             onUpdateProduct={handleUpdateProductCell}
             onSelectProduct={(prod) => setSelectedProductForDetail(prod)}
@@ -413,26 +302,25 @@ export function App() {
       {/* MODALS */}
       
       {/* Product Details Modal */}
-      <ProductDetailModal
-        product={selectedProductForDetail}
-        transactions={transactions}
-        userRole={userRole}
-        onClose={() => setSelectedProductForDetail(null)}
-        onOpenStockIn={(prod) => handleOpenStockIn(prod)}
-        onOpenStockOut={(prod) => handleOpenStockOut(prod)}
-        onOpenAdjustment={(prod) => setAdjustmentProduct(prod)}
-        onOpenEditProduct={(prod) => {
-          setSelectedProductForDetail(null);
-          setProductForm({ open: true, product: prod });
-        }}
-      />
+      {selectedProductForDetail && (
+        <ProductDetailModal
+          product={selectedProductForDetail}
+          userRole={userRole}
+          transactions={transactions}
+          onClose={() => setSelectedProductForDetail(null)}
+          onOpenStockIn={(prod) => handleOpenStockIn(prod)}
+          onOpenStockOut={(prod) => handleOpenStockOut(prod)}
+          onOpenAdjustment={(prod) => setAdjustmentProduct(prod)}
+          onOpenEditProduct={(prod) => setProductForm({ open: true, product: prod })}
+        />
+      )}
 
       {/* Stock In / Stock Out Workflow Modal */}
       {stockModal.open && (
         <StockMovementModal
           initialType={stockModal.type}
           initialProduct={stockModal.product}
-          products={visibleProducts}
+          products={products}
           onClose={() => setStockModal({ open: false, type: 'IN', product: null })}
           onConfirm={handleStockConfirm}
         />
@@ -459,7 +347,7 @@ export function App() {
       {/* Excel Import Modal */}
       {importModalOpen && (
         <ExcelImportModal
-          existingProducts={visibleProducts}
+          existingProducts={products}
           onClose={() => setImportModalOpen(false)}
           onImportConfirmed={handleConfirmExcelImport}
         />
@@ -477,39 +365,6 @@ export function App() {
         onSuccess={() => {
           setUserRole('admin');
           setAdminAuthOpen(false);
-        }}
-      />
-
-      {/* Review & Publish Changes Modal */}
-      <PublishReviewModal
-        isOpen={reviewModalOpen}
-        drafts={drafts}
-        onClose={() => setReviewModalOpen(false)}
-        onConfirmPublish={handleConfirmPublish}
-      />
-
-      {/* Publish Version History Modal */}
-      <PublishHistoryModal
-        isOpen={historyModalOpen}
-        onClose={() => setHistoryModalOpen(false)}
-      />
-
-      {/* Unsaved Drafts Warning Modal */}
-      <UnsavedDraftsWarningModal
-        isOpen={unsavedWarningOpen}
-        drafts={drafts}
-        onKeepDraft={() => {
-          setUnsavedWarningOpen(false);
-          setUserRole('staff');
-        }}
-        onPublishNow={() => {
-          setUnsavedWarningOpen(false);
-          setReviewModalOpen(true);
-        }}
-        onDiscardAndExit={async () => {
-          await handleDiscardDrafts();
-          setUnsavedWarningOpen(false);
-          setUserRole('staff');
         }}
       />
 
