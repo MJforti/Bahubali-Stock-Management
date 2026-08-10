@@ -64,25 +64,26 @@ export async function createProduct(productData: Omit<Product, 'id' | 'created_a
   };
 
   if (supabase) {
-    const { data, error } = await supabase
-      .from('products')
-      .insert([productData])
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .insert([productData])
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Supabase create product failed:', error);
-      throw new Error(`Cloud database update failed: ${error.message}`);
-    }
-
-    if (data) {
-      const local = getLocalProducts();
-      saveLocalProducts([data, ...local]);
-      return data;
+      if (error) {
+        console.error('Supabase create product failed:', error);
+      } else if (data) {
+        const local = getLocalProducts();
+        saveLocalProducts([data, ...local]);
+        return data;
+      }
+    } catch (err: any) {
+      console.warn('Network fetch error during product creation, applying optimistic update:', err);
     }
   }
 
-  // Local fallback if Supabase not configured
+  // Fallback / Optimistic save
   const current = getLocalProducts();
   const updated = [newProduct, ...current];
   saveLocalProducts(updated);
@@ -93,27 +94,28 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   const now = new Date().toISOString();
 
   if (supabase) {
-    const { data, error } = await supabase
-      .from('products')
-      .update({ ...updates, updated_at: now })
-      .eq('id', id)
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .update({ ...updates, updated_at: now })
+        .eq('id', id)
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Supabase update product failed:', error);
-      throw new Error(`Cloud database stock update failed: ${error.message}`);
-    }
-
-    if (data) {
-      const local = getLocalProducts();
-      const updated = local.map((p) => (p.id === id ? data : p));
-      saveLocalProducts(updated);
-      return data;
+      if (error) {
+        console.error('Supabase update product failed:', error);
+      } else if (data) {
+        const local = getLocalProducts();
+        const updated = local.map((p) => (p.id === id ? data : p));
+        saveLocalProducts(updated);
+        return data;
+      }
+    } catch (err: any) {
+      console.warn('Network fetch error during stock update, applying optimistic update:', err);
     }
   }
 
-  // Local fallback if Supabase not configured
+  // Fallback / Optimistic update
   const current = getLocalProducts();
   let updatedProd: Product | null = null;
 
