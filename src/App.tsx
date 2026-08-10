@@ -146,6 +146,12 @@ export function App() {
           }
         } else if (event === 'TRANSACTIONS_CDC' && payload?.new) {
           setTransactions((prev) => [payload.new as StockTransaction, ...prev]);
+        } else if (event === 'POLL_TRIGGER') {
+          fetchProducts().then((res) => {
+            if (res.products && res.products.length > 0) {
+              setPublishedProducts(res.products);
+            }
+          });
         } else {
           // Full fresh data sync from Supabase PostgreSQL central database
           const [prodRes, txRes, draftRes] = await Promise.all([

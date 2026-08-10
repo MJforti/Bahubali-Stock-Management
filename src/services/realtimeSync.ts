@@ -71,8 +71,9 @@ export function setupRealtimeSync(
           onStatusChange('connected');
         } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
           onStatusChange('reconnecting');
+          onSync('RECONNECT_TRIGGER');
         } else {
-          onStatusChange('local_demo');
+          onStatusChange('connected');
         }
       });
   } catch (err) {
@@ -80,7 +81,32 @@ export function setupRealtimeSync(
     onStatusChange('reconnecting');
   }
 
+  // Mobile Browser Resumption & Fail-Safe Polling Fallback (iOS Safari / Android Chrome)
+  const handleVisibilityOrFocus = () => {
+    if (document.visibilityState === 'visible') {
+      console.log('📱 Mobile browser resumed focus - triggering fresh inventory fetch');
+      onSync('RESUME_TRIGGER');
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    window.addEventListener('online', handleVisibilityOrFocus);
+  }
+
+  // 4-second fail-safe HTTP background polling loop for mobile background sync
+  const pollInterval = setInterval(() => {
+    onSync('POLL_TRIGGER');
+  }, 4000);
+
   return () => {
+    clearInterval(pollInterval);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      window.removeEventListener('online', handleVisibilityOrFocus);
+    }
     if (globalRealtimeChannel) {
       try {
         client.removeChannel(globalRealtimeChannel);

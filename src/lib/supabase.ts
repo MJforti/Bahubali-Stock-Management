@@ -9,17 +9,27 @@ const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3Mi
 export function getStoredSupabaseConfig() {
   const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-  
-  const savedUrl = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_URL) || '') : '';
-  const savedKey = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_KEY) || '') : '';
 
-  const finalUrl = (envUrl && envUrl.startsWith('http')) ? envUrl : (savedUrl || DEFAULT_SUPABASE_URL);
-  const finalKey = envKey || savedKey || DEFAULT_SUPABASE_ANON_KEY;
+  // Purge any legacy broken custom URLs stored in mobile browser localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const savedUrl = localStorage.getItem(STORAGE_KEY_URL);
+      if (savedUrl && !savedUrl.startsWith('https://bpbhnnnrjckcqjvgosu.supabase.co')) {
+        localStorage.removeItem(STORAGE_KEY_URL);
+        localStorage.removeItem(STORAGE_KEY_KEY);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  
+  const finalUrl = (envUrl && envUrl.startsWith('http')) ? envUrl : DEFAULT_SUPABASE_URL;
+  const finalKey = (envKey && envKey.length > 20) ? envKey : DEFAULT_SUPABASE_ANON_KEY;
   
   return {
     url: finalUrl,
     key: finalKey,
-    isConfigured: Boolean(finalUrl && finalKey && finalUrl.startsWith('http'))
+    isConfigured: true
   };
 }
 
@@ -37,15 +47,13 @@ export function clearSupabaseConfig() {
 
 const config = getStoredSupabaseConfig();
 
-export const supabase: SupabaseClient | null = config.isConfigured
-  ? createClient(config.url, config.key, {
-      realtime: {
-        params: {
-          eventsPerSecond: 20
-        }
-      }
-    })
-  : null;
+export const supabase: SupabaseClient = createClient(config.url, config.key, {
+  realtime: {
+    params: {
+      eventsPerSecond: 20
+    }
+  }
+});
 
 // Multi-tab local broadcast channel for offline/demo mode real-time sync
 export const localBroadcastChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window
