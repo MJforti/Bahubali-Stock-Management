@@ -181,36 +181,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           
           {/* + STOCK IN Button */}
-          <button
-            onClick={() => onOpenStockIn()}
-            className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-700 text-white font-extrabold shadow-lg shadow-emerald-700/20 hover:from-emerald-500 hover:to-emerald-600 active:scale-98 transition-all group"
-          >
-            <PlusCircle className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform stroke-[2.5]" />
-            <span className="text-base tracking-wide">+ STOCK IN</span>
-            <span className="text-[10px] text-emerald-100 font-normal mt-0.5">Receive New Items</span>
-          </button>
+          {userRole === 'admin' ? (
+            <button
+              onClick={() => onOpenStockIn()}
+              className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-700 text-white font-extrabold shadow-lg shadow-emerald-700/20 hover:from-emerald-500 hover:to-emerald-600 active:scale-98 transition-all group"
+            >
+              <PlusCircle className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform stroke-[2.5]" />
+              <span className="text-base tracking-wide">+ STOCK IN</span>
+              <span className="text-[10px] text-emerald-100 font-normal mt-0.5">Receive New Items</span>
+            </button>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-500 font-bold opacity-75 cursor-not-allowed">
+              <PlusCircle className="w-8 h-8 mb-2 stroke-[2]" />
+              <span className="text-sm tracking-wide">+ STOCK IN</span>
+              <span className="text-[10px] text-amber-500/80 font-mono mt-0.5">Admin Code Required</span>
+            </div>
+          )}
 
           {/* - STOCK OUT Button */}
-          <button
-            onClick={() => onOpenStockOut()}
-            className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-rose-600 to-rose-700 text-white font-extrabold shadow-lg shadow-rose-700/20 hover:from-rose-500 hover:to-rose-600 active:scale-98 transition-all group"
-          >
-            <MinusCircle className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform stroke-[2.5]" />
-            <span className="text-base tracking-wide">− STOCK OUT</span>
-            <span className="text-[10px] text-rose-100 font-normal mt-0.5">Issue to Customer</span>
-          </button>
+          {userRole === 'admin' ? (
+            <button
+              onClick={() => onOpenStockOut()}
+              className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-rose-600 to-rose-700 text-white font-extrabold shadow-lg shadow-rose-700/20 hover:from-rose-500 hover:to-rose-600 active:scale-98 transition-all group"
+            >
+              <MinusCircle className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform stroke-[2.5]" />
+              <span className="text-base tracking-wide">− STOCK OUT</span>
+              <span className="text-[10px] text-rose-100 font-normal mt-0.5">Issue to Customer</span>
+            </button>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-500 font-bold opacity-75 cursor-not-allowed">
+              <MinusCircle className="w-8 h-8 mb-2 stroke-[2]" />
+              <span className="text-sm tracking-wide">− STOCK OUT</span>
+              <span className="text-[10px] text-amber-500/80 font-mono mt-0.5">Admin Code Required</span>
+            </div>
+          )}
 
           {/* ADD PRODUCT Button */}
-          <button
-            onClick={onOpenAddProduct}
-            className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 font-extrabold shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 active:scale-98 transition-all group"
-          >
-            <PackagePlus className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform stroke-[2.5]" />
-            <span className="text-base tracking-wide">ADD PRODUCT</span>
-            <span className="text-[10px] text-slate-900 font-medium mt-0.5">Create New SKU</span>
-          </button>
+          {userRole === 'admin' ? (
+            <button
+              onClick={onOpenAddProduct}
+              className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 font-extrabold shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 active:scale-98 transition-all group"
+            >
+              <PackagePlus className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform stroke-[2.5]" />
+              <span className="text-base tracking-wide">ADD PRODUCT</span>
+              <span className="text-[10px] text-slate-900 font-medium mt-0.5">Create New SKU</span>
+            </button>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-500 font-bold opacity-75 cursor-not-allowed">
+              <PackagePlus className="w-8 h-8 mb-2 stroke-[2]" />
+              <span className="text-sm tracking-wide">ADD PRODUCT</span>
+              <span className="text-[10px] text-amber-500/80 font-mono mt-0.5">Admin Code Required</span>
+            </div>
+          )}
 
-          {/* SEARCH STOCK Button */}
+          {/* SEARCH STOCK Button (Always Available for Staff) */}
           <button
             onClick={onGoToProductsSearch}
             className="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 font-extrabold hover:bg-slate-850 hover:border-amber-500/50 active:scale-98 transition-all group"

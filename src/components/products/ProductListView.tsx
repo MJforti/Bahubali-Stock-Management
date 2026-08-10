@@ -116,13 +116,15 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={onOpenImportModal}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors"
-          >
-            <Upload className="w-3.5 h-3.5 text-amber-400" />
-            <span>Import</span>
-          </button>
+          {userRole === 'admin' && (
+            <button
+              onClick={onOpenImportModal}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors"
+            >
+              <Upload className="w-3.5 h-3.5 text-amber-400" />
+              <span>Import</span>
+            </button>
+          )}
 
           <button
             onClick={onExportExcel}
@@ -132,13 +134,15 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
             <span>Export</span>
           </button>
 
-          <button
-            onClick={onOpenAddProduct}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-xl text-xs font-extrabold shadow-md shadow-amber-500/10 transition-all"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>Add Product</span>
-          </button>
+          {userRole === 'admin' && (
+            <button
+              onClick={onOpenAddProduct}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-xl text-xs font-extrabold shadow-md shadow-amber-500/10 transition-all"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>Add Product</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -323,30 +327,40 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
                   </div>
                 </div>
 
-                {/* Action Buttons: Stock In & Stock Out */}
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenStockIn(product);
-                    }}
-                    className="flex items-center justify-center gap-1 py-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 rounded-xl text-xs font-bold transition-all active:scale-95"
-                  >
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    <span>+ Stock In</span>
-                  </button>
+                {/* Action Buttons: Stock In & Stock Out for Admin, View Details for Staff */}
+                {userRole === 'admin' ? (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenStockIn(product);
+                      }}
+                      className="flex items-center justify-center gap-1 py-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 rounded-xl text-xs font-bold transition-all active:scale-95"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>+ Stock In</span>
+                    </button>
 
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenStockOut(product);
+                      }}
+                      className="flex items-center justify-center gap-1 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 rounded-xl text-xs font-bold transition-all active:scale-95"
+                    >
+                      <MinusCircle className="w-3.5 h-3.5" />
+                      <span>− Stock Out</span>
+                    </button>
+                  </div>
+                ) : (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenStockOut(product);
-                    }}
-                    className="flex items-center justify-center gap-1 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 rounded-xl text-xs font-bold transition-all active:scale-95"
+                    onClick={() => onSelectProduct(product)}
+                    className="w-full py-2 bg-slate-950 hover:bg-slate-800 text-amber-400 border border-slate-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
                   >
-                    <MinusCircle className="w-3.5 h-3.5" />
-                    <span>− Stock Out</span>
+                    <Package className="w-3.5 h-3.5" />
+                    <span>View Specifications & Location</span>
                   </button>
-                </div>
+                )}
 
               </div>
 

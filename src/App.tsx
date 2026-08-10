@@ -19,12 +19,14 @@ import { exportInventoryToExcel } from './services/excelService';
 import { supabase, localBroadcastChannel } from './lib/supabase';
 
 import { SplashScreen } from './components/layout/SplashScreen';
+import { AdminPasscodeModal } from './components/auth/AdminPasscodeModal';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
-  const [userRole, setUserRole] = useState<UserRole>('admin');
+  const [userRole, setUserRole] = useState<UserRole>('staff'); // STAFF VIEW BY DEFAULT
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('local_demo');
   const [searchQuery, setSearchQuery] = useState('');
+  const [adminAuthOpen, setAdminAuthOpen] = useState(false);
 
   const [products, setProducts] = useState<Product[]>(() => getLocalProducts());
   const [transactions, setTransactions] = useState<StockTransaction[]>(() => getLocalTransactions());
@@ -44,6 +46,15 @@ export function App() {
   });
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
+  // Handle Role Switching
+  const handleRoleChangeRequest = (role: UserRole) => {
+    if (role === 'admin') {
+      setAdminAuthOpen(true);
+    } else {
+      setUserRole('staff');
+    }
+  };
 
   // Load Initial Data & Subscriptions
   const loadData = useCallback(async () => {
@@ -65,30 +76,41 @@ export function App() {
   useEffect(() => {
     loadData();
 
-    // Supabase Real-time Cloud Subscriptions & WebSockets Broadcast
+    // Granular Supabase Realtime CDC Subscriptions
     if (supabase) {
       const client = supabase;
       let channel: any = null;
 
       try {
         channel = client
-          .channel('bahubali_global_sync', {
-            config: {
-              broadcast: { self: true }
-            }
-          })
+          .channel('bahubali_realtime_cdc')
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'products' },
-            () => {
-              fetchProducts().then((res) => setProducts(res.products));
+            (payload: any) => {
+              console.log('⚡ Realtime Products Event:', payload);
+              if (payload.eventType === 'INSERT' && payload.new) {
+                setProducts((prev) => {
+                  const exists = prev.some((p) => p.id === payload.new.id);
+                  return exists ? prev : [payload.new as Product, ...prev];
+                });
+              } else if (payload.eventType === 'UPDATE' && payload.new) {
+                setProducts((prev) =>
+                  prev.map((p) => (p.id === payload.new.id ? (payload.new as Product) : p))
+                );
+              } else if (payload.eventType === 'DELETE' && payload.old) {
+                setProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
+              }
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'stock_transactions' },
-            () => {
-              fetchStockTransactions().then((res) => setTransactions(res));
+            (payload: any) => {
+              console.log('⚡ Realtime Transactions Event:', payload);
+              if (payload.eventType === 'INSERT' && payload.new) {
+                setTransactions((prev) => [payload.new as StockTransaction, ...prev]);
+              }
             }
           )
           .on(
@@ -106,30 +128,19 @@ export function App() {
             }
           )
           .subscribe((status) => {
+            console.log('Supabase Realtime Connection Status:', status);
             if (status === 'SUBSCRIBED') {
               setRealtimeStatus('connected');
             } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
               setRealtimeStatus('reconnecting');
+              loadData(); // Refetch latest DB state upon reconnection
             }
           });
       } catch (err) {
-        console.warn('Realtime channel error:', err);
+        console.warn('Realtime channel subscription error:', err);
       }
 
-      // Fail-safe background polling every 3 seconds for mobile devices
-      const pollInterval = setInterval(() => {
-        fetchProducts().then((res) => {
-          if (res.products && res.products.length > 0) {
-            setProducts(res.products);
-          }
-        });
-        fetchStockTransactions().then((txs) => {
-          if (txs) setTransactions(txs);
-        });
-      }, 3000);
-
       return () => {
-        clearInterval(pollInterval);
         if (channel) {
           try {
             client.removeChannel(channel);
@@ -245,7 +256,7 @@ export function App() {
       {/* Top Navbar */}
       <Navbar
         currentRole={userRole}
-        onRoleChange={setUserRole}
+        onRoleChange={handleRoleChangeRequest}
         realtimeStatus={realtimeStatus}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -367,6 +378,16 @@ export function App() {
       {settingsModalOpen && (
         <SupabaseConfigModal onClose={() => setSettingsModalOpen(false)} />
       )}
+
+      {/* Admin Security Passcode Unlock Modal */}
+      <AdminPasscodeModal
+        isOpen={adminAuthOpen}
+        onClose={() => setAdminAuthOpen(false)}
+        onSuccess={() => {
+          setUserRole('admin');
+          setAdminAuthOpen(false);
+        }}
+      />
 
     </div>
   );

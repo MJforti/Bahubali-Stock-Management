@@ -100,28 +100,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Role Switcher */}
             <div className="relative flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
-              <button
-                onClick={() => onRoleChange('admin')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                  currentRole === 'admin'
-                    ? 'bg-amber-500 text-slate-950 shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Admin</span>
-              </button>
-              <button
-                onClick={() => onRoleChange('staff')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                  currentRole === 'staff'
-                    ? 'bg-amber-500 text-slate-950 shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <User className="w-3.5 h-3.5" />
-                <span>Staff</span>
-              </button>
+              {currentRole === 'admin' ? (
+                <button
+                  onClick={() => onRoleChange('staff')}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 text-slate-950 rounded-lg text-xs font-black shadow transition-all hover:bg-amber-400"
+                  title="Click to Exit Admin Mode"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Admin Mode (Exit)</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => onRoleChange('admin')}
+                  className="flex items-center gap-1.5 px-3 py-1 text-slate-400 hover:text-amber-400 rounded-lg text-xs font-bold transition-all"
+                  title="Unlock Admin Mode with Passcode"
+                >
+                  <User className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Staff View</span>
+                  <span className="ml-1 px-1.5 py-0.2 bg-slate-900 border border-slate-800 rounded text-[10px] text-amber-400 font-mono">Unlock Admin</span>
+                </button>
+              )}
             </div>
 
             {/* Settings Modal Button */}

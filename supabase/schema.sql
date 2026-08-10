@@ -82,7 +82,17 @@ CREATE TABLE IF NOT EXISTS profiles (
   email TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
   created_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- 7. ADMIN PASSCODE VERIFICATION RPC FUNCTION
+CREATE OR REPLACE FUNCTION verify_admin_code(input_code TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Default master code: 9988 or 1234
+  RETURN (input_code = '9988' OR input_code = '1234');
+END;
+$$;
 
 -- INDEXES FOR FAST SEARCH AND REAL-TIME AGGREGATIONS
 CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);

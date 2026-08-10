@@ -37,6 +37,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
   });
 
   const handleStartEdit = (product: Product) => {
+    if (userRole !== 'admin') return;
     setEditingId(product.id);
     setEditForm({
       current_stock: product.current_stock,

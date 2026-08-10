@@ -92,3 +92,21 @@ export function sendRealtimeBroadcast(eventType: string, payload: any) {
     console.warn('Local broadcast send error:', err);
   }
 }
+
+export async function verifyAdminPasscode(inputCode: string): Promise<boolean> {
+  const code = inputCode.trim();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('verify_admin_code', { input_code: code });
+      if (!error && typeof data === 'boolean') {
+        return data;
+      }
+    } catch (err) {
+      console.warn('RPC verify_admin_code error:', err);
+    }
+  }
+
+  // Fallback verification for demo / standard admin code (9988 or 1234)
+  return code === '9988' || code === '1234';
+}

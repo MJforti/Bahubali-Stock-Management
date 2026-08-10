@@ -149,24 +149,24 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
 
             {/* Quick Action Buttons */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-850">
-              <button
-                onClick={() => onOpenStockIn(product)}
-                className="flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold shadow-md transition-all active:scale-95"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>+ Stock In</span>
-              </button>
+            {userRole === 'admin' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-850">
+                <button
+                  onClick={() => onOpenStockIn(product)}
+                  className="flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold shadow-md transition-all active:scale-95"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>+ Stock In</span>
+                </button>
 
-              <button
-                onClick={() => onOpenStockOut(product)}
-                className="flex items-center justify-center gap-1.5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-extrabold shadow-md transition-all active:scale-95"
-              >
-                <MinusCircle className="w-4 h-4" />
-                <span>− Stock Out</span>
-              </button>
+                <button
+                  onClick={() => onOpenStockOut(product)}
+                  className="flex items-center justify-center gap-1.5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-extrabold shadow-md transition-all active:scale-95"
+                >
+                  <MinusCircle className="w-4 h-4" />
+                  <span>− Stock Out</span>
+                </button>
 
-              {userRole === 'admin' && (
                 <button
                   onClick={() => onOpenAdjustment(product)}
                   className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-xl text-xs font-extrabold transition-all active:scale-95"
@@ -174,8 +174,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <Sliders className="w-4 h-4" />
                   <span>Adjust Stock</span>
                 </button>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="pt-2 border-t border-slate-850 text-center">
+                <span className="text-xs font-mono text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl inline-block">
+                  🔒 Staff Read-Only Access (Unlock Admin to Modify Stock)
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Grid Details (Prices, Supplier, Rack) */}
