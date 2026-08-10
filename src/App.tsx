@@ -13,8 +13,8 @@ import { ExcelImportModal } from './components/excel/ExcelImportModal';
 import { SupabaseConfigModal } from './components/settings/SupabaseConfigModal';
 
 import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
-import { fetchProducts, createProduct, updateProduct } from './services/productService';
-import { fetchStockTransactions, recordStockMovement } from './services/stockService';
+import { fetchProducts, createProduct, updateProduct, getLocalProducts } from './services/productService';
+import { fetchStockTransactions, recordStockMovement, getLocalTransactions } from './services/stockService';
 import { exportInventoryToExcel } from './services/excelService';
 import { supabase, localBroadcastChannel } from './lib/supabase';
 
@@ -25,10 +25,10 @@ export function App() {
   const [userRole, setUserRole] = useState<UserRole>('admin');
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('local_demo');
   const [searchQuery, setSearchQuery] = useState('');
-  const [initialLoading, setInitialLoading] = useState(true);
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [transactions, setTransactions] = useState<StockTransaction[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => getLocalProducts());
+  const [transactions, setTransactions] = useState<StockTransaction[]>(() => getLocalTransactions());
+  const [initialLoading, setInitialLoading] = useState<boolean>(() => getLocalProducts().length === 0);
 
   // Modal States
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
@@ -48,11 +48,12 @@ export function App() {
   // Load Initial Data & Subscriptions
   const loadData = useCallback(async () => {
     try {
-      const prodRes = await fetchProducts();
+      const [prodRes, txRes] = await Promise.all([
+        fetchProducts(),
+        fetchStockTransactions()
+      ]);
       setProducts(prodRes.products);
       setRealtimeStatus(prodRes.realtimeStatus);
-
-      const txRes = await fetchStockTransactions();
       setTransactions(txRes);
     } catch (err) {
       console.error('Error loading inventory data:', err);
