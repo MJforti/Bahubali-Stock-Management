@@ -109,3 +109,7 @@ export function broadcastGlobalSync(eventType = 'PUBLISH_RELEASE', extraData = {
     }
   }
 }
+
+export function triggerGlobalSyncRefreshAll() {
+  broadcastGlobalSync('FORCE_REFRESH_ALL', { initiatedAt: new Date().toISOString() });
+}
