@@ -38,7 +38,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectProduct
 }) => {
   // Compute Dashboard Statistics
-  const activeProducts = products.filter((p) => p.is_active);
+  const activeProducts = products.filter((p) => p.is_active !== false);
   const totalProducts = activeProducts.length;
   const totalStockUnits = activeProducts.reduce((acc, p) => acc + (p.current_stock || 0), 0);
   

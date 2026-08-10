@@ -64,7 +64,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return products.filter((p) => {
-      if (!p.is_active) return false;
+      if (p.is_active === false) return false;
 
       // Category filter
       if (selectedCategory !== 'ALL' && p.category !== selectedCategory) return false;

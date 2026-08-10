@@ -94,7 +94,7 @@ export async function updateProduct(id: string, updates: Partial<Product>, produ
     console.warn('Supabase update product network warning:', err);
   }
 
-  const updatedProduct = { id, ...updates, updated_at: now } as Product;
+  const updatedProduct = { id, is_active: true, ...updates, updated_at: now } as Product;
   broadcastGlobalSync('PRODUCT_UPDATE', updatedProduct);
   return updatedProduct;
 }
