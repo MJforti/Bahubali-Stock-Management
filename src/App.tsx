@@ -32,6 +32,7 @@ import {
   discardAllDrafts,
   publishAllDrafts
 } from './services/draftService';
+import { setupRealtimeSync } from './services/realtimeSync';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -125,103 +126,49 @@ export function App() {
   useEffect(() => {
     loadData();
 
-    // Granular Supabase Realtime CDC Subscriptions
-    if (supabase) {
-      const client = supabase;
-      let channel: any = null;
+    // Centralized Dual-Trigger CDC + Broadcast Real-time Subscriptions
+    const unsubscribe = setupRealtimeSync(
+      async (event, payload) => {
+        console.log(`🌐 Realtime Event [${event}]:`, payload);
 
-      try {
-        channel = client
-          .channel('bahubali_realtime_cdc')
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'products' },
-            (payload: any) => {
-              console.log('⚡ Realtime Published Products Event:', payload);
-              if (payload.eventType === 'INSERT' && payload.new) {
-                setPublishedProducts((prev) => {
-                  const exists = prev.some((p) => p.id === payload.new.id || p.sku === payload.new.sku);
-                  return exists ? prev : [payload.new as Product, ...prev];
-                });
-              } else if (payload.eventType === 'UPDATE' && payload.new) {
-                setPublishedProducts((prev) =>
-                  prev.map((p) => (p.id === payload.new.id || p.sku === payload.new.sku ? (payload.new as Product) : p))
-                );
-              } else if (payload.eventType === 'DELETE' && payload.old) {
-                setPublishedProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
-              }
-            }
-          )
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'stock_transactions' },
-            (payload: any) => {
-              console.log('⚡ Realtime Transactions Event:', payload);
-              if (payload.eventType === 'INSERT' && payload.new) {
-                setTransactions((prev) => [payload.new as StockTransaction, ...prev]);
-              }
-            }
-          )
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'inventory_versions' },
-            () => {
-              console.log('⚡ Realtime Publication Release Event');
-              fetchProducts().then((res) => setPublishedProducts(res.products));
-              fetchProductDrafts().then((d) => setDrafts(d));
-            }
-          )
-          .on(
-            'broadcast',
-            { event: 'PRODUCTS_UPDATED' },
-            (e: any) => {
-              if (e.payload) setPublishedProducts(e.payload);
-            }
-          )
-          .on(
-            'broadcast',
-            { event: 'TRANSACTIONS_UPDATED' },
-            (e: any) => {
-              if (e.payload) setTransactions(e.payload);
-            }
-          )
-          .subscribe((status) => {
-            console.log('Supabase Realtime Connection Status:', status);
-            if (status === 'SUBSCRIBED') {
-              setRealtimeStatus('connected');
-            } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
-              setRealtimeStatus('reconnecting');
-              loadData(); // Refetch latest DB state upon reconnection
-            }
-          });
-      } catch (err) {
-        console.warn('Realtime channel subscription error:', err);
-      }
-
-      return () => {
-        if (channel) {
-          try {
-            client.removeChannel(channel);
-          } catch (err) {
-            // silent ignore
+        if (event === 'PRODUCTS_CDC' && payload?.new) {
+          if (payload.eventType === 'INSERT') {
+            setPublishedProducts((prev) => {
+              const exists = prev.some((p) => p.id === payload.new.id || p.sku === payload.new.sku);
+              return exists ? prev : [payload.new as Product, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setPublishedProducts((prev) =>
+              prev.map((p) => (p.id === payload.new.id || p.sku === payload.new.sku ? (payload.new as Product) : p))
+            );
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setPublishedProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
           }
+        } else if (event === 'TRANSACTIONS_CDC' && payload?.new) {
+          setTransactions((prev) => [payload.new as StockTransaction, ...prev]);
+        } else {
+          // Full fresh data sync from Supabase PostgreSQL central database
+          const [prodRes, txRes, draftRes] = await Promise.all([
+            fetchProducts(),
+            fetchStockTransactions(),
+            fetchProductDrafts()
+          ]);
+          setPublishedProducts(prodRes.products);
+          setTransactions(txRes);
+          setDrafts(draftRes);
         }
-      };
-    } else if (localBroadcastChannel) {
-      const channel = localBroadcastChannel;
-      const handleLocalMessage = (event: MessageEvent) => {
-        if (event.data?.type === 'PRODUCTS_UPDATED') {
-          setPublishedProducts(event.data.payload);
-        } else if (event.data?.type === 'TRANSACTIONS_UPDATED') {
-          setTransactions(event.data.payload);
+      },
+      (status) => {
+        setRealtimeStatus(status);
+        if (status === 'connected') {
+          loadData();
         }
-      };
+      }
+    );
 
-      channel.addEventListener('message', handleLocalMessage);
-      return () => {
-        channel.removeEventListener('message', handleLocalMessage);
-      };
-    }
+    return () => {
+      unsubscribe();
+    };
   }, [loadData]);
 
   // Keep detail modal updated with latest stock

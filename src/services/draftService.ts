@@ -120,6 +120,8 @@ export async function discardAllDrafts(): Promise<void> {
   localStorage.removeItem(LOCAL_DRAFTS_KEY);
 }
 
+import { broadcastGlobalSync } from './realtimeSync';
+
 export async function publishAllDrafts(
   publishedBy = 'Admin',
   note = 'Standard Inventory Update'
@@ -128,6 +130,9 @@ export async function publishAllDrafts(
   if (drafts.length === 0) {
     return { version: 1, count: 0 };
   }
+
+  let finalVersion = Date.now();
+  let success = false;
 
   if (supabase) {
     try {
@@ -139,25 +144,31 @@ export async function publishAllDrafts(
 
       if (!error && typeof data === 'number') {
         localStorage.removeItem(LOCAL_DRAFTS_KEY);
-        return { version: data, count: drafts.length };
+        finalVersion = data;
+        success = true;
       }
     } catch (err) {
       console.warn('Supabase RPC publish_inventory_drafts error, executing batch publication fallback:', err);
     }
   }
 
-  // Fallback Batch Publication
-  for (const d of drafts) {
-    const payload = d.draft_payload;
-    if (d.action_type === 'CREATE') {
-      await createProduct(payload);
-    } else if (d.action_type === 'UPDATE' || d.action_type === 'STOCK_MOVEMENT') {
-      await updateProduct(d.product_id, payload, payload.sku);
+  if (!success) {
+    // Fallback Batch Publication
+    for (const d of drafts) {
+      const payload = d.draft_payload;
+      if (d.action_type === 'CREATE') {
+        await createProduct(payload);
+      } else if (d.action_type === 'UPDATE' || d.action_type === 'STOCK_MOVEMENT') {
+        await updateProduct(d.product_id, payload, payload.sku);
+      }
     }
+    await discardAllDrafts();
   }
 
-  await discardAllDrafts();
-  return { version: Date.now(), count: drafts.length };
+  // BROADCAST TO ALL CONNECTED DEVICES WORLDWIDE IMMEDIATELY
+  broadcastGlobalSync('PUBLISH_RELEASE', { version: finalVersion, publishedBy, note });
+
+  return { version: finalVersion, count: drafts.length };
 }
 
 export async function fetchPublishHistory(): Promise<InventoryVersion[]> {
