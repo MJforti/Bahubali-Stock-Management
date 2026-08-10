@@ -108,7 +108,7 @@ export async function recordStockMovement(params: {
   };
 
   // Update Product Stock
-  const updatedProduct = await updateProduct(product.id, { current_stock: newStock });
+  const updatedProduct = await updateProduct(product.id, { current_stock: newStock }, product.sku);
 
   // Record Transaction
   let createdTransaction: StockTransaction = {

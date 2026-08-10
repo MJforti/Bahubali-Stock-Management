@@ -103,36 +103,39 @@ export async function createProduct(productData: Omit<Product, 'id' | 'created_a
   return newProduct;
 }
 
-export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
+export async function updateProduct(id: string, updates: Partial<Product>, productSku?: string): Promise<Product> {
   const now = new Date().toISOString();
 
   if (supabase) {
     try {
-      // First try matching by ID
+      // 1. Try matching by ID first
       let { data, error } = await supabase
         .from('products')
         .update({ ...updates, updated_at: now })
         .eq('id', id)
-        .select()
-        .single();
+        .select();
 
-      // If ID match failed (e.g. legacy local ID), fallback to SKU match
-      if ((error || !data) && updates.sku) {
+      const skuToSearch = updates.sku || productSku;
+
+      // 2. If ID match returned 0 rows, fallback to SKU match
+      if ((!data || data.length === 0 || error) && skuToSearch) {
         const skuRes = await supabase
           .from('products')
           .update({ ...updates, updated_at: now })
-          .eq('sku', updates.sku)
-          .select()
-          .single();
-        data = skuRes.data;
+          .eq('sku', skuToSearch)
+          .select();
+        if (skuRes.data && skuRes.data.length > 0) {
+          data = skuRes.data;
+        }
       }
 
-      if (data) {
+      if (data && data.length > 0) {
+        const updatedItem = data[0];
         // Fetch all fresh products from Supabase database to ensure 100% sync
         const freshRes = await supabase.from('products').select('*').order('name', { ascending: true });
         if (freshRes.data && freshRes.data.length > 0) {
           saveLocalProducts(freshRes.data);
-          return freshRes.data.find((p) => p.id === data.id) || data;
+          return freshRes.data.find((p) => p.id === updatedItem.id || p.sku === updatedItem.sku) || updatedItem;
         }
       }
     } catch (err: any) {
@@ -143,9 +146,10 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   // Fallback / Optimistic update
   const current = getLocalProducts();
   let updatedProd: Product | null = null;
+  const targetSku = updates.sku || productSku;
 
   const updatedList = current.map((p) => {
-    if (p.id === id || (updates.sku && p.sku === updates.sku)) {
+    if (p.id === id || (targetSku && p.sku === targetSku)) {
       updatedProd = { ...p, ...updates, updated_at: now };
       return updatedProd;
     }
