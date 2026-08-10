@@ -62,46 +62,58 @@ export function App() {
     // Supabase Real-time Cloud Subscriptions & WebSockets Broadcast
     if (supabase) {
       const client = supabase;
-      const channel = client
-        .channel('bahubali_global_sync')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'products' },
-          () => {
-            fetchProducts().then((res) => setProducts(res.products));
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'stock_transactions' },
-          () => {
-            fetchStockTransactions().then((res) => setTransactions(res));
-          }
-        )
-        .on(
-          'broadcast',
-          { event: 'PRODUCTS_UPDATED' },
-          (e: any) => {
-            if (e.payload) setProducts(e.payload);
-          }
-        )
-        .on(
-          'broadcast',
-          { event: 'TRANSACTIONS_UPDATED' },
-          (e: any) => {
-            if (e.payload) setTransactions(e.payload);
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            setRealtimeStatus('connected');
-          } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
-            setRealtimeStatus('reconnecting');
-          }
-        });
+      let channel: any = null;
+
+      try {
+        channel = client
+          .channel('bahubali_global_sync')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'products' },
+            () => {
+              fetchProducts().then((res) => setProducts(res.products));
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'stock_transactions' },
+            () => {
+              fetchStockTransactions().then((res) => setTransactions(res));
+            }
+          )
+          .on(
+            'broadcast',
+            { event: 'PRODUCTS_UPDATED' },
+            (e: any) => {
+              if (e.payload) setProducts(e.payload);
+            }
+          )
+          .on(
+            'broadcast',
+            { event: 'TRANSACTIONS_UPDATED' },
+            (e: any) => {
+              if (e.payload) setTransactions(e.payload);
+            }
+          )
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              setRealtimeStatus('connected');
+            } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
+              setRealtimeStatus('reconnecting');
+            }
+          });
+      } catch (err) {
+        console.warn('Realtime channel error:', err);
+      }
 
       return () => {
-        client.removeChannel(channel);
+        if (channel) {
+          try {
+            client.removeChannel(channel);
+          } catch (err) {
+            // silent ignore
+          }
+        }
       };
     } else if (localBroadcastChannel) {
       const channel = localBroadcastChannel;

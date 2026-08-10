@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 
 const STORAGE_KEY_URL = 'bahubali_supabase_url';
 const STORAGE_KEY_KEY = 'bahubali_supabase_anon_key';
@@ -7,8 +7,8 @@ export function getStoredSupabaseConfig() {
   const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
   
-  const savedUrl = localStorage.getItem(STORAGE_KEY_URL) || '';
-  const savedKey = localStorage.getItem(STORAGE_KEY_KEY) || '';
+  const savedUrl = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_URL) || '') : '';
+  const savedKey = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_KEY) || '') : '';
 
   const finalUrl = (envUrl && envUrl.startsWith('http')) ? envUrl : savedUrl;
   const finalKey = envKey ? envKey : savedKey;
@@ -49,25 +49,39 @@ export const localBroadcastChannel = typeof window !== 'undefined' && 'Broadcast
   ? new BroadcastChannel('bahubali_inventory_sync')
   : null;
 
-// Realtime Supabase Broadcast Channel reference
-export const supabaseBroadcastChannel = supabase
-  ? supabase.channel('bahubali_global_sync')
-  : null;
+let activeBroadcastChannel: RealtimeChannel | null = null;
 
-if (supabaseBroadcastChannel) {
-  supabaseBroadcastChannel.subscribe();
+export function getActiveBroadcastChannel(): RealtimeChannel | null {
+  if (supabase && !activeBroadcastChannel) {
+    try {
+      activeBroadcastChannel = supabase.channel('bahubali_global_sync');
+      activeBroadcastChannel.subscribe();
+    } catch (err) {
+      console.warn('Failed to subscribe to Supabase broadcast channel:', err);
+    }
+  }
+  return activeBroadcastChannel;
 }
 
 export function sendRealtimeBroadcast(eventType: string, payload: any) {
-  if (supabaseBroadcastChannel) {
-    supabaseBroadcastChannel.send({
-      type: 'broadcast',
-      event: eventType,
-      payload
-    });
+  try {
+    const channel = getActiveBroadcastChannel();
+    if (channel) {
+      channel.send({
+        type: 'broadcast',
+        event: eventType,
+        payload
+      });
+    }
+  } catch (err) {
+    console.warn('Supabase broadcast send error:', err);
   }
 
-  if (localBroadcastChannel) {
-    localBroadcastChannel.postMessage({ type: eventType, payload });
+  try {
+    if (localBroadcastChannel) {
+      localBroadcastChannel.postMessage({ type: eventType, payload });
+    }
+  } catch (err) {
+    console.warn('Local broadcast send error:', err);
   }
 }
