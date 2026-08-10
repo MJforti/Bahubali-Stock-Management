@@ -92,10 +92,13 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
     }
   };
 
+  const currentStockNum = Number(selectedProduct?.current_stock) || 0;
+  const qtyNum = Number(quantity) || 0;
+
   const newCalculatedStock = selectedProduct
     ? type === 'IN'
-      ? selectedProduct.current_stock + quantity
-      : selectedProduct.current_stock - quantity
+      ? currentStockNum + qtyNum
+      : Math.max(0, currentStockNum - qtyNum)
     : 0;
 
   return (

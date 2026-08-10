@@ -42,25 +42,30 @@ export async function recordStockMovement(params: {
 }): Promise<{ product: Product; transaction: StockTransaction }> {
   const { product, type, quantity, reason, reference, userName } = params;
 
-  if (quantity <= 0) {
+  const currentStockNum = Number(product.current_stock) || 0;
+  const qtyNum = Number(quantity) || 0;
+
+  if (qtyNum <= 0) {
     throw new Error('Quantity must be greater than zero.');
   }
 
-  if (type === 'OUT' && product.current_stock < quantity) {
-    throw new Error(`Cannot issue ${quantity} ${product.unit}(s). Current stock is only ${product.current_stock} ${product.unit}(s).`);
+  if (type === 'OUT' && currentStockNum < qtyNum) {
+    throw new Error(`Cannot issue ${qtyNum} ${product.unit}(s). Current stock is only ${currentStockNum} ${product.unit}(s).`);
   }
 
   if (type === 'ADJUSTMENT' && (!reason || reason.trim().length === 0)) {
     throw new Error('A mandatory audit reason is required for manual stock adjustments.');
   }
 
+  const opType = type.toUpperCase().trim() as TransactionType;
+
   // 1. ATOMIC SUPABASE RPC CALL
   try {
     const { data: rpcProduct, error: rpcError } = await supabase.rpc('record_stock_change', {
       p_product_id: product.id,
-      p_type: type,
-      p_quantity: quantity,
-      p_reason: reason || (type === 'IN' ? 'Stock In Addition' : 'Stock Out Issue'),
+      p_type: opType,
+      p_quantity: qtyNum,
+      p_reason: reason || (opType === 'IN' ? 'Stock In Addition' : 'Stock Out Issue'),
       p_reference: reference || '',
       p_user_name: userName || 'Admin'
     });
@@ -68,13 +73,14 @@ export async function recordStockMovement(params: {
     if (!rpcError && rpcProduct) {
       console.log('✅ Stock change permanently saved via Supabase RPC:', rpcProduct);
       const updated = rpcProduct as Product;
-      
+      updated.current_stock = Number(updated.current_stock) || 0;
+
       const createdTx: StockTransaction = {
         id: `tx-${Date.now()}`,
         product_id: updated.id,
-        type,
-        quantity: type === 'ADJUSTMENT' ? Math.abs(quantity - product.current_stock) : quantity,
-        previous_stock: product.current_stock,
+        type: opType,
+        quantity: opType === 'ADJUSTMENT' ? Math.abs(qtyNum - currentStockNum) : qtyNum,
+        previous_stock: currentStockNum,
         new_stock: updated.current_stock,
         reason: reason || '',
         reference: reference || '',
@@ -95,13 +101,18 @@ export async function recordStockMovement(params: {
     console.warn('RPC execution exception, using fallback updateProduct:', rpcErr);
   }
 
-  // 2. FALLBACK MANUAL UPDATE
-  let newStock = product.current_stock;
-  if (type === 'IN') newStock += quantity;
-  else if (type === 'OUT') newStock -= quantity;
-  else if (type === 'ADJUSTMENT') newStock = quantity;
+  // 2. FALLBACK MANUAL UPDATE (STRICT CALCULATION)
+  let newStock = currentStockNum;
+  if (opType === 'IN') {
+    newStock = currentStockNum + qtyNum;
+  } else if (opType === 'OUT') {
+    newStock = Math.max(0, currentStockNum - qtyNum);
+  } else if (opType === 'ADJUSTMENT') {
+    newStock = qtyNum;
+  }
 
   const updatedProduct = await updateProduct(product.id, { current_stock: newStock }, product.sku);
+  updatedProduct.current_stock = Number(updatedProduct.current_stock) || 0;
 
   const transactionData = {
     product_id: updatedProduct.id,
