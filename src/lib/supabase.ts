@@ -3,6 +3,9 @@ import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabas
 const STORAGE_KEY_URL = 'bahubali_supabase_url';
 const STORAGE_KEY_KEY = 'bahubali_supabase_anon_key';
 
+const DEFAULT_SUPABASE_URL = 'https://bpbhnnnrjckcqjvgosu.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwYmhubm5yamNrY3FqdmdvZ3N1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMjk1OTMsImV4cCI6MjEwMTkwNTU5M30.MNINRwl702gdd7Zcv_6mmaLNqLsu0uOGB0GXpdbwBws';
+
 export function getStoredSupabaseConfig() {
   const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -10,8 +13,8 @@ export function getStoredSupabaseConfig() {
   const savedUrl = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_URL) || '') : '';
   const savedKey = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEY_KEY) || '') : '';
 
-  const finalUrl = (envUrl && envUrl.startsWith('http')) ? envUrl : savedUrl;
-  const finalKey = envKey ? envKey : savedKey;
+  const finalUrl = (envUrl && envUrl.startsWith('http')) ? envUrl : (savedUrl || DEFAULT_SUPABASE_URL);
+  const finalKey = envKey || savedKey || DEFAULT_SUPABASE_ANON_KEY;
   
   return {
     url: finalUrl,
@@ -54,7 +57,11 @@ let activeBroadcastChannel: RealtimeChannel | null = null;
 export function getActiveBroadcastChannel(): RealtimeChannel | null {
   if (supabase && !activeBroadcastChannel) {
     try {
-      activeBroadcastChannel = supabase.channel('bahubali_global_sync');
+      activeBroadcastChannel = supabase.channel('bahubali_global_sync', {
+        config: {
+          broadcast: { self: true }
+        }
+      });
       activeBroadcastChannel.subscribe();
     } catch (err) {
       console.warn('Failed to subscribe to Supabase broadcast channel:', err);

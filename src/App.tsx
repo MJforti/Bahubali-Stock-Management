@@ -66,7 +66,11 @@ export function App() {
 
       try {
         channel = client
-          .channel('bahubali_global_sync')
+          .channel('bahubali_global_sync', {
+            config: {
+              broadcast: { self: true }
+            }
+          })
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'products' },
@@ -106,7 +110,20 @@ export function App() {
         console.warn('Realtime channel error:', err);
       }
 
+      // Fail-safe background polling every 3 seconds for mobile devices
+      const pollInterval = setInterval(() => {
+        fetchProducts().then((res) => {
+          if (res.products && res.products.length > 0) {
+            setProducts(res.products);
+          }
+        });
+        fetchStockTransactions().then((txs) => {
+          if (txs) setTransactions(txs);
+        });
+      }, 3000);
+
       return () => {
+        clearInterval(pollInterval);
         if (channel) {
           try {
             client.removeChannel(channel);
