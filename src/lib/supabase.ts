@@ -38,7 +38,7 @@ export const supabase: SupabaseClient | null = config.isConfigured
   ? createClient(config.url, config.key, {
       realtime: {
         params: {
-          eventsPerSecond: 10
+          eventsPerSecond: 20
         }
       }
     })
@@ -48,3 +48,26 @@ export const supabase: SupabaseClient | null = config.isConfigured
 export const localBroadcastChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window
   ? new BroadcastChannel('bahubali_inventory_sync')
   : null;
+
+// Realtime Supabase Broadcast Channel reference
+export const supabaseBroadcastChannel = supabase
+  ? supabase.channel('bahubali_global_sync')
+  : null;
+
+if (supabaseBroadcastChannel) {
+  supabaseBroadcastChannel.subscribe();
+}
+
+export function sendRealtimeBroadcast(eventType: string, payload: any) {
+  if (supabaseBroadcastChannel) {
+    supabaseBroadcastChannel.send({
+      type: 'broadcast',
+      event: eventType,
+      payload
+    });
+  }
+
+  if (localBroadcastChannel) {
+    localBroadcastChannel.postMessage({ type: eventType, payload });
+  }
+}

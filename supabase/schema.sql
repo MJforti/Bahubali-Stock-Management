@@ -95,6 +95,9 @@ CREATE INDEX IF NOT EXISTS idx_transactions_product ON stock_transactions(produc
 CREATE INDEX IF NOT EXISTS idx_transactions_created ON stock_transactions(created_at DESC);
 
 -- REAL-TIME PUBLICATION ENABLING
+ALTER TABLE products REPLICA IDENTITY FULL;
+ALTER TABLE stock_transactions REPLICA IDENTITY FULL;
+
 ALTER PUBLICATION supabase_realtime ADD TABLE products;
 ALTER PUBLICATION supabase_realtime ADD TABLE stock_transactions;
 

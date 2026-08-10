@@ -1,4 +1,4 @@
-import { supabase, localBroadcastChannel } from '../lib/supabase';
+import { supabase, localBroadcastChannel, sendRealtimeBroadcast } from '../lib/supabase';
 import { StockTransaction, TransactionType, Product } from '../types/inventory';
 import { INITIAL_TRANSACTIONS } from '../data/seedData';
 import { updateProduct, getLocalProducts } from './productService';
@@ -21,9 +21,7 @@ export function getLocalTransactions(): StockTransaction[] {
 export function saveLocalTransactions(transactions: StockTransaction[]) {
   try {
     localStorage.setItem(LOCAL_TRANSACTIONS_KEY, JSON.stringify(transactions));
-    if (localBroadcastChannel) {
-      localBroadcastChannel.postMessage({ type: 'TRANSACTIONS_UPDATED', payload: transactions });
-    }
+    sendRealtimeBroadcast('TRANSACTIONS_UPDATED', transactions);
   } catch (err) {
     console.error('Error saving stock transactions:', err);
   }

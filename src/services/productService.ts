@@ -1,4 +1,4 @@
-import { supabase, localBroadcastChannel } from '../lib/supabase';
+import { supabase, localBroadcastChannel, sendRealtimeBroadcast } from '../lib/supabase';
 import { Product, RealtimeStatus } from '../types/inventory';
 import { INITIAL_PRODUCTS } from '../data/seedData';
 
@@ -21,9 +21,7 @@ export function getLocalProducts(): Product[] {
 export function saveLocalProducts(products: Product[]) {
   try {
     localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(products));
-    if (localBroadcastChannel) {
-      localBroadcastChannel.postMessage({ type: 'PRODUCTS_UPDATED', payload: products });
-    }
+    sendRealtimeBroadcast('PRODUCTS_UPDATED', products);
   } catch (err) {
     console.error('Error saving local products:', err);
   }

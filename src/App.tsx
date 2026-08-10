@@ -59,11 +59,11 @@ export function App() {
   useEffect(() => {
     loadData();
 
-    // Supabase Real-time Cloud Subscriptions
+    // Supabase Real-time Cloud Subscriptions & WebSockets Broadcast
     if (supabase) {
       const client = supabase;
       const channel = client
-        .channel('schema-db-changes')
+        .channel('bahubali_global_sync')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'products' },
@@ -76,6 +76,20 @@ export function App() {
           { event: '*', schema: 'public', table: 'stock_transactions' },
           () => {
             fetchStockTransactions().then((res) => setTransactions(res));
+          }
+        )
+        .on(
+          'broadcast',
+          { event: 'PRODUCTS_UPDATED' },
+          (e: any) => {
+            if (e.payload) setProducts(e.payload);
+          }
+        )
+        .on(
+          'broadcast',
+          { event: 'TRANSACTIONS_UPDATED' },
+          (e: any) => {
+            if (e.payload) setTransactions(e.payload);
           }
         )
         .subscribe((status) => {
@@ -91,7 +105,6 @@ export function App() {
       };
     } else if (localBroadcastChannel) {
       const channel = localBroadcastChannel;
-      // Local Multi-Tab Broadcast Sync Listener
       const handleLocalMessage = (event: MessageEvent) => {
         if (event.data?.type === 'PRODUCTS_UPDATED') {
           setProducts(event.data.payload);
