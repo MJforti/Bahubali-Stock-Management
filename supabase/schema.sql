@@ -104,6 +104,7 @@ ALTER TABLE stock_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE brands ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow public read access to products" ON products FOR SELECT USING (true);
 CREATE POLICY "Allow public edit access to products" ON products FOR ALL USING (true);
@@ -114,6 +115,7 @@ CREATE POLICY "Allow public edit access to stock_transactions" ON stock_transact
 CREATE POLICY "Allow public access to brands" ON brands FOR ALL USING (true);
 CREATE POLICY "Allow public access to categories" ON categories FOR ALL USING (true);
 CREATE POLICY "Allow public access to suppliers" ON suppliers FOR ALL USING (true);
+CREATE POLICY "Allow public access to profiles" ON profiles FOR ALL USING (true);
 
 -- STORAGE BUCKET CREATION FOR PRODUCT PHOTOS
 INSERT INTO storage.buckets (id, name, public) 
