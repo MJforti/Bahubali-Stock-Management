@@ -1,4 +1,4 @@
-import { supabase, localBroadcastChannel, sendRealtimeBroadcast } from '../lib/supabase';
+import { supabase, sendRealtimeBroadcast } from '../lib/supabase';
 import { Product, RealtimeStatus } from '../types/inventory';
 import { INITIAL_PRODUCTS } from '../data/seedData';
 
@@ -13,8 +13,6 @@ export function getLocalProducts(): Product[] {
   } catch (err) {
     console.error('Error reading local products:', err);
   }
-  // Initialize with seed data if empty
-  localStorage.setItem(LOCAL_PRODUCTS_KEY, JSON.stringify(INITIAL_PRODUCTS));
   return INITIAL_PRODUCTS;
 }
 
@@ -49,7 +47,7 @@ export async function fetchProducts(): Promise<{ products: Product[]; realtimeSt
         }
       }
     } catch (err) {
-      console.warn('Supabase fetch failed, falling back to local dataset:', err);
+      console.warn('Supabase fetch products error:', err);
       return { products: getLocalProducts(), realtimeStatus: 'reconnecting' };
     }
   }
@@ -66,24 +64,25 @@ export async function createProduct(productData: Omit<Product, 'id' | 'created_a
   };
 
   if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .insert([productData])
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from('products')
+      .insert([productData])
+      .select()
+      .single();
 
-      if (!error && data) {
-        const local = getLocalProducts();
-        saveLocalProducts([data, ...local]);
-        return data;
-      }
-    } catch (err) {
-      console.error('Supabase create product error:', err);
+    if (error) {
+      console.error('Supabase create product failed:', error);
+      throw new Error(`Cloud database update failed: ${error.message}`);
+    }
+
+    if (data) {
+      const local = getLocalProducts();
+      saveLocalProducts([data, ...local]);
+      return data;
     }
   }
 
-  // Local fallback
+  // Local fallback if Supabase not configured
   const current = getLocalProducts();
   const updated = [newProduct, ...current];
   saveLocalProducts(updated);
@@ -94,26 +93,27 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   const now = new Date().toISOString();
 
   if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .update({ ...updates, updated_at: now })
-        .eq('id', id)
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from('products')
+      .update({ ...updates, updated_at: now })
+      .eq('id', id)
+      .select()
+      .single();
 
-      if (!error && data) {
-        const local = getLocalProducts();
-        const updated = local.map((p) => (p.id === id ? data : p));
-        saveLocalProducts(updated);
-        return data;
-      }
-    } catch (err) {
-      console.error('Supabase update product error:', err);
+    if (error) {
+      console.error('Supabase update product failed:', error);
+      throw new Error(`Cloud database stock update failed: ${error.message}`);
+    }
+
+    if (data) {
+      const local = getLocalProducts();
+      const updated = local.map((p) => (p.id === id ? data : p));
+      saveLocalProducts(updated);
+      return data;
     }
   }
 
-  // Local fallback
+  // Local fallback if Supabase not configured
   const current = getLocalProducts();
   let updatedProd: Product | null = null;
 
@@ -132,14 +132,12 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
 
 export async function deleteOrDeactivateProduct(id: string, permanent = false): Promise<void> {
   if (supabase) {
-    try {
-      if (permanent) {
-        await supabase.from('products').delete().eq('id', id);
-      } else {
-        await supabase.from('products').update({ is_active: false, updated_at: new Date().toISOString() }).eq('id', id);
-      }
-    } catch (err) {
-      console.error('Supabase delete error:', err);
+    if (permanent) {
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabase.from('products').update({ is_active: false, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw new Error(error.message);
     }
   }
 
