@@ -106,7 +106,15 @@ export function App() {
             fetchStockTransactions()
           ]);
           setProducts(prodRes.products);
-          setTransactions(txRes);
+          setTransactions((prev) => {
+            if (!txRes || txRes.length === 0) return prev;
+            const mergedMap = new Map<string, StockTransaction>();
+            txRes.forEach((t) => mergedMap.set(t.id, t));
+            prev.forEach((t) => {
+              if (!mergedMap.has(t.id)) mergedMap.set(t.id, t);
+            });
+            return Array.from(mergedMap.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          });
         }
       },
       (status) => {

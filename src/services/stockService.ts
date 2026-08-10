@@ -7,25 +7,23 @@ export async function fetchStockTransactions(): Promise<StockTransaction[]> {
   try {
     const { data, error } = await supabase
       .from('stock_transactions')
-      .select(`
-        *,
-        products (
-          name,
-          sku,
-          image_url,
-          brand
-        )
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      return data.map((t: any) => ({
-        ...t,
-        product_name: t.products?.name || t.product_name || 'Unknown Product',
-        product_sku: t.products?.sku || t.product_sku || '',
-        product_image: t.products?.image_url || t.product_image || '',
-        product_brand: t.products?.brand || t.product_brand || ''
-      }));
+    if (!error && data && data.length > 0) {
+      const { data: prodData } = await supabase.from('products').select('id, name, sku, brand, image_url');
+      const prodMap = new Map((prodData || []).map((p: any) => [p.id, p]));
+
+      return data.map((t: any) => {
+        const prod = prodMap.get(t.product_id);
+        return {
+          ...t,
+          product_name: prod?.name || t.product_name || 'Hardware Item',
+          product_sku: prod?.sku || t.product_sku || '',
+          product_image: prod?.image_url || t.product_image || '',
+          product_brand: prod?.brand || t.product_brand || ''
+        };
+      });
     }
   } catch (err) {
     console.error('Supabase transactions fetch failed:', err);
