@@ -1,7 +1,8 @@
-import * as XLSX from 'xlsx';
 import { Product, ExcelColumnMapping } from '../types/inventory';
 
-export function exportInventoryToExcel(products: Product[], filename = 'Bahubali_Enterprises_Inventory') {
+export async function exportInventoryToExcel(products: Product[], filename = 'Bahubali_Enterprises_Inventory') {
+  const XLSX = await import('xlsx');
+
   const exportData = products.map((p) => ({
     'Product Name': p.name,
     'Brand': p.brand,
@@ -54,8 +55,9 @@ export function parseExcelFile(file: File): Promise<{ headers: string[]; rows: R
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
+        const XLSX = await import('xlsx');
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
