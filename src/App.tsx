@@ -18,11 +18,14 @@ import { fetchStockTransactions, recordStockMovement } from './services/stockSer
 import { exportInventoryToExcel } from './services/excelService';
 import { supabase, localBroadcastChannel } from './lib/supabase';
 
+import { SplashScreen } from './components/layout/SplashScreen';
+
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [userRole, setUserRole] = useState<UserRole>('admin');
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('local_demo');
   const [searchQuery, setSearchQuery] = useState('');
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
@@ -53,6 +56,8 @@ export function App() {
       setTransactions(txRes);
     } catch (err) {
       console.error('Error loading inventory data:', err);
+    } finally {
+      setInitialLoading(false);
     }
   }, []);
 
@@ -228,6 +233,10 @@ export function App() {
       setProducts((prev) => [created, ...prev]);
     }
   };
+
+  if (initialLoading) {
+    return <SplashScreen statusMessage="Connecting to Bahubali Supabase Cloud..." />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
