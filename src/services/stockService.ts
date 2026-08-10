@@ -88,17 +88,21 @@ export async function recordStockMovement(params: {
     product_brand: updatedProduct.brand
   };
 
-  const { data, error } = await supabase
-    .from('stock_transactions')
-    .insert([transactionData])
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('stock_transactions')
+      .insert([transactionData])
+      .select()
+      .single();
 
-  if (!error && data) {
-    createdTransaction = {
-      ...createdTransaction,
-      id: data.id
-    };
+    if (!error && data) {
+      createdTransaction = {
+        ...createdTransaction,
+        id: data.id
+      };
+    }
+  } catch (err: any) {
+    console.warn('Supabase stock transaction logging network warning:', err);
   }
 
   // Instant Real-Time Sync Broadcast

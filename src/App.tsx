@@ -50,21 +50,29 @@ export function App() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
-  // Centralized Single-Source Data Fetcher
+  // Ultra-Fast Data Fetcher (Instant Hydration)
   const loadData = useCallback(async () => {
     try {
-      const [prodRes, txRes] = await Promise.all([
-        fetchProducts(),
-        fetchStockTransactions()
-      ]);
+      // 1. Fetch Products for instant UI render
+      const prodRes = await fetchProducts();
       setProducts(prodRes.products);
       setRealtimeStatus(prodRes.realtimeStatus);
-      setTransactions(txRes);
+      setInitialLoading(false);
+
+      // 2. Fetch Transaction History asynchronously in background without blocking initial render
+      fetchStockTransactions().then((txs) => setTransactions(txs));
     } catch (err) {
       console.error('Error loading central inventory data:', err);
-    } finally {
       setInitialLoading(false);
     }
+  }, []);
+
+  // Safety cutoff timer: Dismiss splash screen after 300ms max
+  useEffect(() => {
+    const splashTimer = setTimeout(() => {
+      setInitialLoading(false);
+    }, 300);
+    return () => clearTimeout(splashTimer);
   }, []);
 
   // Real-time Subscriptions Setup
