@@ -1,66 +1,37 @@
-import { supabase, localBroadcastChannel, sendRealtimeBroadcast } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { StockTransaction, TransactionType, Product } from '../types/inventory';
-import { INITIAL_TRANSACTIONS } from '../data/seedData';
-import { updateProduct, getLocalProducts } from './productService';
+import { updateProduct } from './productService';
 import { broadcastGlobalSync } from './realtimeSync';
 
-const LOCAL_TRANSACTIONS_KEY = 'bahubali_stock_transactions';
-
-export function getLocalTransactions(): StockTransaction[] {
-  try {
-    const data = localStorage.getItem(LOCAL_TRANSACTIONS_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-  } catch (err) {
-    console.error('Error reading stock transactions:', err);
-  }
-  localStorage.setItem(LOCAL_TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
-  return INITIAL_TRANSACTIONS;
-}
-
-export function saveLocalTransactions(transactions: StockTransaction[]) {
-  try {
-    localStorage.setItem(LOCAL_TRANSACTIONS_KEY, JSON.stringify(transactions));
-    sendRealtimeBroadcast('TRANSACTIONS_UPDATED', transactions);
-  } catch (err) {
-    console.error('Error saving stock transactions:', err);
-  }
-}
-
 export async function fetchStockTransactions(): Promise<StockTransaction[]> {
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('stock_transactions')
-        .select(`
-          *,
-          products (
-            name,
-            sku,
-            image_url,
-            brand
-          )
-        `)
-        .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('stock_transactions')
+      .select(`
+        *,
+        products (
+          name,
+          sku,
+          image_url,
+          brand
+        )
+      `)
+      .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        const formatted: StockTransaction[] = data.map((t: any) => ({
-          ...t,
-          product_name: t.products?.name || t.product_name || 'Unknown Product',
-          product_sku: t.products?.sku || t.product_sku || '',
-          product_image: t.products?.image_url || t.product_image || '',
-          product_brand: t.products?.brand || t.product_brand || ''
-        }));
-        saveLocalTransactions(formatted);
-        return formatted;
-      }
-    } catch (err) {
-      console.warn('Supabase transactions fetch failed, using local audit log:', err);
+    if (!error && data) {
+      return data.map((t: any) => ({
+        ...t,
+        product_name: t.products?.name || t.product_name || 'Unknown Product',
+        product_sku: t.products?.sku || t.product_sku || '',
+        product_image: t.products?.image_url || t.product_image || '',
+        product_brand: t.products?.brand || t.product_brand || ''
+      }));
     }
+  } catch (err) {
+    console.error('Supabase transactions fetch failed:', err);
   }
 
-  return getLocalTransactions();
+  return [];
 }
 
 export async function recordStockMovement(params: {
@@ -86,69 +57,51 @@ export async function recordStockMovement(params: {
     }
     newStock -= quantity;
   } else if (type === 'ADJUSTMENT') {
-    newStock = quantity; // quantity represents the target count in adjustment mode
+    newStock = quantity;
     if (!reason || reason.trim().length === 0) {
       throw new Error('A mandatory audit reason is required for manual stock adjustments.');
     }
   }
 
-  const transactionData: Omit<StockTransaction, 'id'> = {
-    product_id: product.id,
+  // 1. Update Product Stock directly in Central Database
+  const updatedProduct = await updateProduct(product.id, { current_stock: newStock }, product.sku);
+
+  // 2. Insert Stock Transaction Log directly in Central Database
+  const transactionData = {
+    product_id: updatedProduct.id,
     type,
     quantity: type === 'ADJUSTMENT' ? Math.abs(newStock - product.current_stock) : quantity,
     previous_stock: product.current_stock,
     new_stock: newStock,
     reason: reason || (type === 'IN' ? 'Stock In Addition' : 'Stock Out Issue'),
     reference: reference || '',
-    user_name: userName,
-    created_at: new Date().toISOString(),
-    product_name: product.name,
-    product_sku: product.sku,
-    product_image: product.image_url,
-    product_brand: product.brand
+    user_name: userName
   };
 
-  // Update Product Stock
-  const updatedProduct = await updateProduct(product.id, { current_stock: newStock }, product.sku);
-
-  // Record Transaction
   let createdTransaction: StockTransaction = {
     ...transactionData,
-    id: `tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    id: `tx-${Date.now()}`,
+    created_at: new Date().toISOString(),
+    product_name: updatedProduct.name,
+    product_sku: updatedProduct.sku,
+    product_image: updatedProduct.image_url,
+    product_brand: updatedProduct.brand
   };
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('stock_transactions')
-        .insert([{
-          product_id: updatedProduct.id,
-          type: transactionData.type,
-          quantity: transactionData.quantity,
-          previous_stock: transactionData.previous_stock,
-          new_stock: transactionData.new_stock,
-          reason: transactionData.reason,
-          reference: transactionData.reference,
-          user_name: transactionData.user_name
-        }])
-        .select()
-        .single();
+  const { data, error } = await supabase
+    .from('stock_transactions')
+    .insert([transactionData])
+    .select()
+    .single();
 
-      if (!error && data) {
-        createdTransaction = {
-          ...createdTransaction,
-          id: data.id
-        };
-      }
-    } catch (err) {
-      console.error('Supabase transaction insert failed:', err);
-    }
+  if (!error && data) {
+    createdTransaction = {
+      ...createdTransaction,
+      id: data.id
+    };
   }
 
-  const localTx = getLocalTransactions();
-  saveLocalTransactions([createdTransaction, ...localTx]);
-
-  // INSTANT BROADCAST TO ALL CONNECTED DEVICES
+  // Instant Real-Time Sync Broadcast
   broadcastGlobalSync('STOCK_UPDATE', { productId: updatedProduct.id, newStock });
 
   return { product: updatedProduct, transaction: createdTransaction };

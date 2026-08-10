@@ -13,8 +13,8 @@ import { ExcelImportModal } from './components/excel/ExcelImportModal';
 import { SupabaseConfigModal } from './components/settings/SupabaseConfigModal';
 
 import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
-import { fetchProducts, createProduct, updateProduct, getLocalProducts } from './services/productService';
-import { fetchStockTransactions, recordStockMovement, getLocalTransactions } from './services/stockService';
+import { fetchProducts, createProduct, updateProduct } from './services/productService';
+import { fetchStockTransactions, recordStockMovement } from './services/stockService';
 import { exportInventoryToExcel } from './services/excelService';
 import { setupRealtimeSync } from './services/realtimeSync';
 
@@ -31,9 +31,9 @@ export function App() {
   const [lastRealtimeEvent, setLastRealtimeEvent] = useState<string>('Connected to Central DB');
 
   // Single Authoritative Products & Transactions State
-  const [products, setProducts] = useState<Product[]>(() => getLocalProducts());
-  const [transactions, setTransactions] = useState<StockTransaction[]>(() => getLocalTransactions());
-  const [initialLoading, setInitialLoading] = useState<boolean>(() => getLocalProducts().length === 0);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [transactions, setTransactions] = useState<StockTransaction[]>([]);
+  const [initialLoading, setInitialLoading] = useState<boolean>(true);
 
   // Modal States
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
