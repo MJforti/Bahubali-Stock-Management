@@ -7,13 +7,16 @@ export function getStoredSupabaseConfig() {
   const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
   
-  const savedUrl = localStorage.getItem(STORAGE_KEY_URL) || envUrl;
-  const savedKey = localStorage.getItem(STORAGE_KEY_KEY) || envKey;
+  const savedUrl = localStorage.getItem(STORAGE_KEY_URL) || '';
+  const savedKey = localStorage.getItem(STORAGE_KEY_KEY) || '';
+
+  const finalUrl = (envUrl && envUrl.startsWith('http')) ? envUrl : savedUrl;
+  const finalKey = envKey ? envKey : savedKey;
   
   return {
-    url: savedUrl,
-    key: savedKey,
-    isConfigured: Boolean(savedUrl && savedKey && savedUrl.startsWith('http'))
+    url: finalUrl,
+    key: finalKey,
+    isConfigured: Boolean(finalUrl && finalKey && finalUrl.startsWith('http'))
   };
 }
 
