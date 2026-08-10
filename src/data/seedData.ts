@@ -39,7 +39,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
-    id: 'p1',
+    id: 'b1000000-0000-0000-0000-000000000001',
     name: 'Bosch 8mm Drill Bit for Concrete',
     brand: 'Bosch',
     category: 'Tools & Accessories',
@@ -65,7 +65,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p2',
+    id: 'b1000000-0000-0000-0000-000000000002',
     name: 'Asian Paints Primer White 4L',
     brand: 'Asian Paints',
     category: 'Paint & Coatings',
@@ -91,7 +91,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p3',
+    id: 'b1000000-0000-0000-0000-000000000003',
     name: 'Polycab 2.5 sq mm Copper Wire 90m (Red)',
     brand: 'Polycab',
     category: 'Electrical',
@@ -117,7 +117,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p4',
+    id: 'b1000000-0000-0000-0000-000000000004',
     name: 'Taparia Screwdriver Set 6 Pcs',
     brand: 'Taparia',
     category: 'Hand Tools',
@@ -143,7 +143,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p5',
+    id: 'b1000000-0000-0000-0000-000000000005',
     name: 'Finolex 4-inch PVC Pipe 10ft',
     brand: 'Finolex',
     category: 'Plumbing',
@@ -169,7 +169,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p6',
+    id: 'b1000000-0000-0000-0000-000000000006',
     name: 'Dr. Fixit Waterproofing Compound 1L',
     brand: 'Dr. Fixit',
     category: 'Adhesives & Chemicals',
@@ -195,7 +195,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p7',
+    id: 'b1000000-0000-0000-0000-000000000007',
     name: 'Stanley Claw Hammer 16oz Fiberglass',
     brand: 'Stanley',
     category: 'Hand Tools',
@@ -221,7 +221,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p8',
+    id: 'b1000000-0000-0000-0000-000000000008',
     name: 'Anchor 1 Switch 6A Modular (Roma)',
     brand: 'Anchor',
     category: 'Electrical',
@@ -247,7 +247,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p9',
+    id: 'b1000000-0000-0000-0000-000000000009',
     name: 'SS Screws 1.5 inch (Box of 100)',
     brand: 'Supreme',
     category: 'Fasteners',
@@ -273,7 +273,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p10',
+    id: 'b1000000-0000-0000-0000-000000000010',
     name: 'PVC 90 Degree Elbow 2 inch',
     brand: 'Supreme',
     category: 'Plumbing',
@@ -299,7 +299,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p11',
+    id: 'b1000000-0000-0000-0000-000000000011',
     name: 'Makita 4-inch Angle Grinder 850W',
     brand: 'Makita',
     category: 'Power Tools',
@@ -325,7 +325,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_by: 'Admin'
   },
   {
-    id: 'p12',
+    id: 'b1000000-0000-0000-0000-000000000012',
     name: 'Fevicol SH Synthetic Resin Adhesive 1kg',
     brand: 'Fevicol',
     category: 'Adhesives & Chemicals',
@@ -355,7 +355,7 @@ export const INITIAL_PRODUCTS: Product[] = [
 export const INITIAL_TRANSACTIONS: StockTransaction[] = [
   {
     id: 't1',
-    product_id: 'p1',
+    product_id: 'b1000000-0000-0000-0000-000000000001',
     type: 'IN',
     quantity: 20,
     previous_stock: 0,
@@ -370,7 +370,7 @@ export const INITIAL_TRANSACTIONS: StockTransaction[] = [
   },
   {
     id: 't2',
-    product_id: 'p1',
+    product_id: 'b1000000-0000-0000-0000-000000000001',
     type: 'OUT',
     quantity: 6,
     previous_stock: 20,
@@ -385,7 +385,7 @@ export const INITIAL_TRANSACTIONS: StockTransaction[] = [
   },
   {
     id: 't3',
-    product_id: 'p6',
+    product_id: 'b1000000-0000-0000-0000-000000000006',
     type: 'OUT',
     quantity: 3,
     previous_stock: 5,

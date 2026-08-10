@@ -8,7 +8,13 @@ export function getLocalProducts(): Product[] {
   try {
     const data = localStorage.getItem(LOCAL_PRODUCTS_KEY);
     if (data) {
-      return JSON.parse(data);
+      const parsed: Product[] = JSON.parse(data);
+      // Migration: if cached products use legacy 'p1' ID format, clear cache to force fresh UUID sync from Supabase
+      if (parsed.length > 0 && parsed[0].id.startsWith('p1')) {
+        localStorage.removeItem(LOCAL_PRODUCTS_KEY);
+        return INITIAL_PRODUCTS;
+      }
+      return parsed;
     }
   } catch (err) {
     console.error('Error reading local products:', err);
@@ -58,7 +64,7 @@ export async function fetchProducts(): Promise<{ products: Product[]; realtimeSt
 export async function createProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
   const newProduct: Product = {
     ...productData,
-    id: `p-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    id: `b1000000-0000-0000-0000-${Date.now().toString().padStart(12, '0')}`,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -71,15 +77,13 @@ export async function createProduct(productData: Omit<Product, 'id' | 'created_a
         .select()
         .single();
 
-      if (error) {
-        console.error('Supabase create product failed:', error);
-      } else if (data) {
+      if (!error && data) {
         const local = getLocalProducts();
         saveLocalProducts([data, ...local]);
         return data;
       }
     } catch (err: any) {
-      console.warn('Network fetch error during product creation, applying optimistic update:', err);
+      console.warn('Network fetch error during product creation:', err);
     }
   }
 
@@ -95,23 +99,35 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      // First try matching by ID
+      let { data, error } = await supabase
         .from('products')
         .update({ ...updates, updated_at: now })
         .eq('id', id)
         .select()
         .single();
 
-      if (error) {
-        console.error('Supabase update product failed:', error);
-      } else if (data) {
-        const local = getLocalProducts();
-        const updated = local.map((p) => (p.id === id ? data : p));
-        saveLocalProducts(updated);
-        return data;
+      // If ID match failed (e.g. legacy local ID), fallback to SKU match
+      if ((error || !data) && updates.sku) {
+        const skuRes = await supabase
+          .from('products')
+          .update({ ...updates, updated_at: now })
+          .eq('sku', updates.sku)
+          .select()
+          .single();
+        data = skuRes.data;
+      }
+
+      if (data) {
+        // Fetch all fresh products from Supabase database to ensure 100% sync
+        const freshRes = await supabase.from('products').select('*').order('name', { ascending: true });
+        if (freshRes.data && freshRes.data.length > 0) {
+          saveLocalProducts(freshRes.data);
+          return freshRes.data.find((p) => p.id === data.id) || data;
+        }
       }
     } catch (err: any) {
-      console.warn('Network fetch error during stock update, applying optimistic update:', err);
+      console.warn('Network fetch error during stock update:', err);
     }
   }
 
@@ -120,7 +136,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   let updatedProd: Product | null = null;
 
   const updatedList = current.map((p) => {
-    if (p.id === id) {
+    if (p.id === id || (updates.sku && p.sku === updates.sku)) {
       updatedProd = { ...p, ...updates, updated_at: now };
       return updatedProd;
     }
