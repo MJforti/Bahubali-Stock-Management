@@ -47,17 +47,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   );
   const outOfStockProducts = activeProducts.filter((p) => p.current_stock === 0);
 
-  // Today's Date Calculation
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todaysTransactions = transactions.filter((t) => t.created_at.slice(0, 10) === todayStr);
+  // Today's Date Calculation (Local Timezone Safe)
+  const isToday = (dateString: string) => {
+    if (!dateString) return false;
+    const d = new Date(dateString);
+    const today = new Date();
+    return (
+      d.getDate() === today.getDate() &&
+      d.getMonth() === today.getMonth() &&
+      d.getFullYear() === today.getFullYear()
+    );
+  };
+
+  const todaysTransactions = transactions.filter((t) => isToday(t.created_at));
 
   const stockAddedToday = todaysTransactions
     .filter((t) => t.type === 'IN')
-    .reduce((acc, t) => acc + t.quantity, 0);
+    .reduce((acc, t) => acc + (Number(t.quantity) || 0), 0);
 
   const stockRemovedToday = todaysTransactions
     .filter((t) => t.type === 'OUT')
-    .reduce((acc, t) => acc + t.quantity, 0);
+    .reduce((acc, t) => acc + (Number(t.quantity) || 0), 0);
 
   return (
     <div className="space-y-6 pb-20 md:pb-6">
