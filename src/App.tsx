@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { BottomNav, ActiveTab } from './components/layout/BottomNav';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -20,6 +20,18 @@ import { supabase, localBroadcastChannel } from './lib/supabase';
 
 import { SplashScreen } from './components/layout/SplashScreen';
 import { AdminPasscodeModal } from './components/auth/AdminPasscodeModal';
+import { DraftHeaderBar } from './components/admin/DraftHeaderBar';
+import { PublishReviewModal } from './components/admin/PublishReviewModal';
+import { PublishHistoryModal } from './components/admin/PublishHistoryModal';
+import { UnsavedDraftsWarningModal } from './components/admin/UnsavedDraftsWarningModal';
+
+import {
+  ProductDraft,
+  fetchProductDrafts,
+  addProductDraft,
+  discardAllDrafts,
+  publishAllDrafts
+} from './services/draftService';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -28,9 +40,16 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [adminAuthOpen, setAdminAuthOpen] = useState(false);
 
-  const [products, setProducts] = useState<Product[]>(() => getLocalProducts());
+  // Published Inventory State (Staff View Source of Truth)
+  const [publishedProducts, setPublishedProducts] = useState<Product[]>(() => getLocalProducts());
   const [transactions, setTransactions] = useState<StockTransaction[]>(() => getLocalTransactions());
   const [initialLoading, setInitialLoading] = useState<boolean>(() => getLocalProducts().length === 0);
+
+  // Draft System States
+  const [drafts, setDrafts] = useState<ProductDraft[]>([]);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [unsavedWarningOpen, setUnsavedWarningOpen] = useState(false);
 
   // Modal States
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
@@ -47,31 +66,61 @@ export function App() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
-  // Handle Role Switching
-  const handleRoleChangeRequest = (role: UserRole) => {
-    if (role === 'admin') {
-      setAdminAuthOpen(true);
-    } else {
-      setUserRole('staff');
+  // Compute Admin Draft View vs Staff Published View
+  const visibleProducts = useMemo(() => {
+    if (userRole === 'staff' || drafts.length === 0) {
+      return publishedProducts;
     }
-  };
 
-  // Load Initial Data & Subscriptions
+    // Apply Admin drafts on top of published inventory for Admin View
+    let draftList = [...publishedProducts];
+    for (const d of drafts) {
+      const payload = d.draft_payload;
+      if (d.action_type === 'CREATE' && payload) {
+        const exists = draftList.some((p) => p.id === payload.id || p.sku === payload.sku);
+        if (!exists) draftList = [payload, ...draftList];
+      } else if ((d.action_type === 'UPDATE' || d.action_type === 'STOCK_MOVEMENT') && payload) {
+        draftList = draftList.map((p) =>
+          p.id === d.product_id || p.sku === payload.sku ? { ...p, ...payload } : p
+        );
+      } else if (d.action_type === 'DELETE') {
+        draftList = draftList.filter((p) => p.id !== d.product_id && p.sku !== payload?.sku);
+      }
+    }
+    return draftList;
+  }, [userRole, publishedProducts, drafts]);
+
+  // Load Initial Data & Drafts
   const loadData = useCallback(async () => {
     try {
-      const [prodRes, txRes] = await Promise.all([
+      const [prodRes, txRes, draftRes] = await Promise.all([
         fetchProducts(),
-        fetchStockTransactions()
+        fetchStockTransactions(),
+        fetchProductDrafts()
       ]);
-      setProducts(prodRes.products);
+      setPublishedProducts(prodRes.products);
       setRealtimeStatus(prodRes.realtimeStatus);
       setTransactions(txRes);
+      setDrafts(draftRes);
     } catch (err) {
       console.error('Error loading inventory data:', err);
     } finally {
       setInitialLoading(false);
     }
   }, []);
+
+  // Handle Role Switching & Unsaved Drafts Guard
+  const handleRoleChangeRequest = (role: UserRole) => {
+    if (role === 'admin') {
+      setAdminAuthOpen(true);
+    } else {
+      if (drafts.length > 0) {
+        setUnsavedWarningOpen(true);
+      } else {
+        setUserRole('staff');
+      }
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -88,18 +137,18 @@ export function App() {
             'postgres_changes',
             { event: '*', schema: 'public', table: 'products' },
             (payload: any) => {
-              console.log('⚡ Realtime Products Event:', payload);
+              console.log('⚡ Realtime Published Products Event:', payload);
               if (payload.eventType === 'INSERT' && payload.new) {
-                setProducts((prev) => {
-                  const exists = prev.some((p) => p.id === payload.new.id);
+                setPublishedProducts((prev) => {
+                  const exists = prev.some((p) => p.id === payload.new.id || p.sku === payload.new.sku);
                   return exists ? prev : [payload.new as Product, ...prev];
                 });
               } else if (payload.eventType === 'UPDATE' && payload.new) {
-                setProducts((prev) =>
-                  prev.map((p) => (p.id === payload.new.id ? (payload.new as Product) : p))
+                setPublishedProducts((prev) =>
+                  prev.map((p) => (p.id === payload.new.id || p.sku === payload.new.sku ? (payload.new as Product) : p))
                 );
               } else if (payload.eventType === 'DELETE' && payload.old) {
-                setProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
+                setPublishedProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
               }
             }
           )
@@ -114,10 +163,19 @@ export function App() {
             }
           )
           .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'inventory_versions' },
+            () => {
+              console.log('⚡ Realtime Publication Release Event');
+              fetchProducts().then((res) => setPublishedProducts(res.products));
+              fetchProductDrafts().then((d) => setDrafts(d));
+            }
+          )
+          .on(
             'broadcast',
             { event: 'PRODUCTS_UPDATED' },
             (e: any) => {
-              if (e.payload) setProducts(e.payload);
+              if (e.payload) setPublishedProducts(e.payload);
             }
           )
           .on(
@@ -153,7 +211,7 @@ export function App() {
       const channel = localBroadcastChannel;
       const handleLocalMessage = (event: MessageEvent) => {
         if (event.data?.type === 'PRODUCTS_UPDATED') {
-          setProducts(event.data.payload);
+          setPublishedProducts(event.data.payload);
         } else if (event.data?.type === 'TRANSACTIONS_UPDATED') {
           setTransactions(event.data.payload);
         }
@@ -169,12 +227,12 @@ export function App() {
   // Keep detail modal updated with latest stock
   useEffect(() => {
     if (selectedProductForDetail) {
-      const updated = products.find((p) => p.id === selectedProductForDetail.id);
+      const updated = visibleProducts.find((p: Product) => p.id === selectedProductForDetail.id);
       if (updated) {
         setSelectedProductForDetail(updated);
       }
     }
-  }, [products]);
+  }, [visibleProducts]);
 
   // Handler Actions
   const handleOpenStockIn = (product: Product | null = null) => {
@@ -192,18 +250,37 @@ export function App() {
     reason?: string;
     reference?: string;
   }) => {
-    const res = await recordStockMovement({
-      product: params.product,
-      type: params.type,
-      quantity: params.quantity,
-      reason: params.reason,
-      reference: params.reference,
-      userName: userRole === 'admin' ? 'Raj (Admin)' : 'Amit (Staff)'
-    });
+    const { product, type, quantity, reason, reference } = params;
+    let newStock = product.current_stock;
+    if (type === 'IN') newStock += quantity;
+    else if (type === 'OUT') newStock -= quantity;
 
-    // Update local state
-    setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
-    setTransactions((prev) => [res.transaction, ...prev]);
+    const summary = `${product.name}: ${type === 'IN' ? '+' : '-'}${quantity} ${product.unit}s (${product.current_stock} → ${newStock})`;
+
+    await addProductDraft(
+      product.id,
+      'STOCK_MOVEMENT',
+      {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        current_stock: newStock,
+        transaction: {
+          product_id: product.id,
+          type,
+          quantity,
+          previous_stock: product.current_stock,
+          new_stock: newStock,
+          reason: reason || (type === 'IN' ? 'Stock In Addition' : 'Stock Out Issue'),
+          reference: reference || '',
+          user_name: 'Raj (Admin)'
+        }
+      },
+      summary
+    );
+
+    const freshDrafts = await fetchProductDrafts();
+    setDrafts(freshDrafts);
   };
 
   const handleStockAdjustmentConfirm = async (params: {
@@ -212,38 +289,87 @@ export function App() {
     quantity: number;
     reason: string;
   }) => {
-    const res = await recordStockMovement({
-      product: params.product,
-      type: 'ADJUSTMENT',
-      quantity: params.quantity,
-      reason: params.reason,
-      userName: userRole === 'admin' ? 'Raj (Admin)' : 'Amit (Staff)'
-    });
+    const { product, quantity, reason } = params;
+    const summary = `${product.name}: Stock Adjustment (${product.current_stock} → ${quantity})`;
 
-    setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
-    setTransactions((prev) => [res.transaction, ...prev]);
+    await addProductDraft(
+      product.id,
+      'STOCK_MOVEMENT',
+      {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        current_stock: quantity,
+        transaction: {
+          product_id: product.id,
+          type: 'ADJUSTMENT',
+          quantity: Math.abs(quantity - product.current_stock),
+          previous_stock: product.current_stock,
+          new_stock: quantity,
+          reason,
+          user_name: 'Raj (Admin)'
+        }
+      },
+      summary
+    );
+
+    const freshDrafts = await fetchProductDrafts();
+    setDrafts(freshDrafts);
   };
 
   const handleSaveProduct = async (productData: Partial<Product>) => {
     if (productForm.product?.id) {
-      const updated = await updateProduct(productForm.product.id, productData);
-      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      const prod = productForm.product;
+      const summary = `Edit Product: ${productData.name || prod.name}`;
+      await addProductDraft(
+        prod.id,
+        'UPDATE',
+        { id: prod.id, sku: prod.sku, ...productData },
+        summary
+      );
     } else {
-      const created = await createProduct(productData as any);
-      setProducts((prev) => [created, ...prev]);
+      const newId = `b1000000-0000-0000-0000-${Date.now().toString().padStart(12, '0')}`;
+      const fullProd = {
+        ...productData,
+        id: newId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      const summary = `Add Product: ${productData.name} (${productData.sku})`;
+      await addProductDraft(newId, 'CREATE', fullProd, summary);
     }
+
+    const freshDrafts = await fetchProductDrafts();
+    setDrafts(freshDrafts);
   };
 
   const handleUpdateProductCell = async (id: string, updates: Partial<Product>) => {
-    const updated = await updateProduct(id, updates);
-    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    const prod = publishedProducts.find((p) => p.id === id);
+    const summary = `Cell Edit: ${prod?.name || id}`;
+    await addProductDraft(id, 'UPDATE', { id, sku: prod?.sku, ...updates }, summary);
+    const freshDrafts = await fetchProductDrafts();
+    setDrafts(freshDrafts);
   };
 
   const handleConfirmExcelImport = async (importedProducts: Partial<Product>[]) => {
     for (const prodData of importedProducts) {
-      const created = await createProduct(prodData as any);
-      setProducts((prev) => [created, ...prev]);
+      const newId = `b1000000-0000-0000-0000-${Date.now().toString().padStart(12, '0')}`;
+      const summary = `Import Product: ${prodData.name}`;
+      await addProductDraft(newId, 'CREATE', { ...prodData, id: newId }, summary);
     }
+    const freshDrafts = await fetchProductDrafts();
+    setDrafts(freshDrafts);
+  };
+
+  const handleConfirmPublish = async (note: string) => {
+    await publishAllDrafts('Raj (Admin)', note);
+    setDrafts([]);
+    await loadData();
+  };
+
+  const handleDiscardDrafts = async () => {
+    await discardAllDrafts();
+    setDrafts([]);
   };
 
   if (initialLoading) {
@@ -264,12 +390,24 @@ export function App() {
         onQuickSearchClick={() => setActiveTab('products')}
       />
 
+      {/* Admin Mode Persistent Draft Header Bar */}
+      {userRole === 'admin' && (
+        <DraftHeaderBar
+          drafts={drafts}
+          onOpenReview={() => setReviewModalOpen(true)}
+          onOpenPublishModal={() => setReviewModalOpen(true)}
+          onOpenHistory={() => setHistoryModalOpen(true)}
+          onDiscardDrafts={handleDiscardDrafts}
+          onExitAdmin={() => handleRoleChangeRequest('staff')}
+        />
+      )}
+
       {/* Main Page Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
         
         {activeTab === 'dashboard' && (
           <DashboardView
-            products={products}
+            products={visibleProducts}
             transactions={transactions}
             userRole={userRole}
             onOpenStockIn={(prod) => handleOpenStockIn(prod)}
@@ -282,7 +420,7 @@ export function App() {
 
         {activeTab === 'products' && (
           <ProductListView
-            products={products}
+            products={visibleProducts}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             userRole={userRole}
@@ -292,7 +430,7 @@ export function App() {
             onOpenStockOut={(prod) => handleOpenStockOut(prod)}
             onOpenEditProduct={(prod) => setProductForm({ open: true, product: prod })}
             onOpenImportModal={() => setImportModalOpen(true)}
-            onExportExcel={() => exportInventoryToExcel(products)}
+            onExportExcel={() => exportInventoryToExcel(visibleProducts)}
           />
         )}
 
@@ -302,7 +440,7 @@ export function App() {
 
         {activeTab === 'datasheet' && (
           <InventoryDataSheet
-            products={products}
+            products={visibleProducts}
             userRole={userRole}
             onUpdateProduct={handleUpdateProductCell}
             onSelectProduct={(prod) => setSelectedProductForDetail(prod)}
@@ -341,7 +479,7 @@ export function App() {
         <StockMovementModal
           initialType={stockModal.type}
           initialProduct={stockModal.product}
-          products={products}
+          products={visibleProducts}
           onClose={() => setStockModal({ open: false, type: 'IN', product: null })}
           onConfirm={handleStockConfirm}
         />
@@ -368,7 +506,7 @@ export function App() {
       {/* Excel Import Modal */}
       {importModalOpen && (
         <ExcelImportModal
-          existingProducts={products}
+          existingProducts={visibleProducts}
           onClose={() => setImportModalOpen(false)}
           onImportConfirmed={handleConfirmExcelImport}
         />
@@ -386,6 +524,39 @@ export function App() {
         onSuccess={() => {
           setUserRole('admin');
           setAdminAuthOpen(false);
+        }}
+      />
+
+      {/* Review & Publish Changes Modal */}
+      <PublishReviewModal
+        isOpen={reviewModalOpen}
+        drafts={drafts}
+        onClose={() => setReviewModalOpen(false)}
+        onConfirmPublish={handleConfirmPublish}
+      />
+
+      {/* Publish Version History Modal */}
+      <PublishHistoryModal
+        isOpen={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+      />
+
+      {/* Unsaved Drafts Warning Modal */}
+      <UnsavedDraftsWarningModal
+        isOpen={unsavedWarningOpen}
+        drafts={drafts}
+        onKeepDraft={() => {
+          setUnsavedWarningOpen(false);
+          setUserRole('staff');
+        }}
+        onPublishNow={() => {
+          setUnsavedWarningOpen(false);
+          setReviewModalOpen(true);
+        }}
+        onDiscardAndExit={async () => {
+          await handleDiscardDrafts();
+          setUnsavedWarningOpen(false);
+          setUserRole('staff');
         }}
       />
 

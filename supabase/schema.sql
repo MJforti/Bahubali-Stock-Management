@@ -119,23 +119,142 @@ ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
--- Products Policies
-CREATE POLICY "Allow public select products" ON products FOR SELECT USING (true);
-CREATE POLICY "Allow public insert products" ON products FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update products" ON products FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public delete products" ON products FOR DELETE USING (true);
+-- 8. PRODUCT DRAFTS TABLE (UNPUBLISHED ADMIN MODIFICATIONS)
+CREATE TABLE IF NOT EXISTS product_drafts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  product_id TEXT NOT NULL,
+  action_type TEXT NOT NULL CHECK (action_type IN ('CREATE', 'UPDATE', 'DELETE', 'STOCK_MOVEMENT')),
+  draft_payload JSONB NOT NULL,
+  change_summary TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by TEXT DEFAULT 'Admin'
+);
 
--- Transactions Policies
-CREATE POLICY "Allow public select stock_transactions" ON stock_transactions FOR SELECT USING (true);
-CREATE POLICY "Allow public insert stock_transactions" ON stock_transactions FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update stock_transactions" ON stock_transactions FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public delete stock_transactions" ON stock_transactions FOR DELETE USING (true);
+-- 9. INVENTORY VERSIONS & PUBLISH HISTORY TABLE
+CREATE TABLE IF NOT EXISTS inventory_versions (
+  version SERIAL PRIMARY KEY,
+  published_by TEXT NOT NULL DEFAULT 'Admin',
+  published_at TIMESTAMPTZ DEFAULT NOW(),
+  changes_count INT NOT NULL DEFAULT 0,
+  note TEXT DEFAULT '',
+  changes_summary JSONB DEFAULT '[]'::jsonb
+);
 
--- Master Tables Policies
-CREATE POLICY "Allow public access to brands" ON brands FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public access to categories" ON categories FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public access to suppliers" ON suppliers FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public access to profiles" ON profiles FOR ALL USING (true) WITH CHECK (true);
+-- 10. ATOMIC PUBLISH TRANSACTION RPC FUNCTION
+CREATE OR REPLACE FUNCTION publish_inventory_drafts(p_published_by TEXT DEFAULT 'Admin', p_note TEXT DEFAULT '')
+RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  draft_rec RECORD;
+  v_changes_count INT := 0;
+  v_new_version INT;
+  v_changes_log JSONB := '[]'::jsonb;
+BEGIN
+  -- Loop through all draft modifications and apply atomically
+  FOR draft_rec IN SELECT * FROM product_drafts ORDER BY created_at ASC LOOP
+    v_changes_count := v_changes_count + 1;
+    v_changes_log := v_changes_log || jsonb_build_object(
+      'action', draft_rec.action_type,
+      'summary', draft_rec.change_summary
+    );
+
+    IF draft_rec.action_type = 'CREATE' THEN
+      INSERT INTO products (
+        id, name, brand, category, sub_category, sku, description, image_url, unit,
+        current_stock, minimum_stock, reorder_level, maximum_stock, purchase_price,
+        selling_price, supplier, rack, shelf, store_section, is_active, updated_at
+      ) VALUES (
+        COALESCE(NULLIF(draft_rec.draft_payload->>'id', '')::uuid, uuid_generate_v4()),
+        draft_rec.draft_payload->>'name',
+        draft_rec.draft_payload->>'brand',
+        draft_rec.draft_payload->>'category',
+        COALESCE(draft_rec.draft_payload->>'sub_category', ''),
+        draft_rec.draft_payload->>'sku',
+        COALESCE(draft_rec.draft_payload->>'description', ''),
+        COALESCE(draft_rec.draft_payload->>'image_url', ''),
+        COALESCE(draft_rec.draft_payload->>'unit', 'Piece'),
+        COALESCE((draft_rec.draft_payload->>'current_stock')::numeric, 0),
+        COALESCE((draft_rec.draft_payload->>'minimum_stock')::numeric, 5),
+        COALESCE((draft_rec.draft_payload->>'reorder_level')::numeric, 10),
+        COALESCE((draft_rec.draft_payload->>'maximum_stock')::numeric, 100),
+        COALESCE((draft_rec.draft_payload->>'purchase_price')::numeric, 0),
+        COALESCE((draft_rec.draft_payload->>'selling_price')::numeric, 0),
+        COALESCE(draft_rec.draft_payload->>'supplier', ''),
+        COALESCE(draft_rec.draft_payload->>'rack', ''),
+        COALESCE(draft_rec.draft_payload->>'shelf', ''),
+        COALESCE(draft_rec.draft_payload->>'store_section', ''),
+        COALESCE((draft_rec.draft_payload->>'is_active')::boolean, true),
+        NOW()
+      ) ON CONFLICT (sku) DO UPDATE SET
+        current_stock = EXCLUDED.current_stock,
+        name = EXCLUDED.name,
+        brand = EXCLUDED.brand,
+        category = EXCLUDED.category,
+        rack = EXCLUDED.rack,
+        image_url = EXCLUDED.image_url,
+        updated_at = NOW();
+
+    ELSIF draft_rec.action_type IN ('UPDATE', 'STOCK_MOVEMENT') THEN
+      UPDATE products SET
+        current_stock = COALESCE((draft_rec.draft_payload->>'current_stock')::numeric, current_stock),
+        name = COALESCE(draft_rec.draft_payload->>'name', name),
+        brand = COALESCE(draft_rec.draft_payload->>'brand', brand),
+        category = COALESCE(draft_rec.draft_payload->>'category', category),
+        rack = COALESCE(draft_rec.draft_payload->>'rack', rack),
+        image_url = COALESCE(draft_rec.draft_payload->>'image_url', image_url),
+        selling_price = COALESCE((draft_rec.draft_payload->>'selling_price')::numeric, selling_price),
+        purchase_price = COALESCE((draft_rec.draft_payload->>'purchase_price')::numeric, purchase_price),
+        updated_at = NOW()
+      WHERE id::text = draft_rec.product_id OR sku = draft_rec.draft_payload->>'sku';
+
+    ELSIF draft_rec.action_type = 'DELETE' THEN
+      UPDATE products SET is_active = FALSE, updated_at = NOW()
+      WHERE id::text = draft_rec.product_id OR sku = draft_rec.draft_payload->>'sku';
+    END IF;
+
+    -- Record Transaction into audit log if transaction payload exists
+    IF (draft_rec.draft_payload ? 'transaction') THEN
+      INSERT INTO stock_transactions (
+        product_id, type, quantity, previous_stock, new_stock, reason, reference, user_name
+      ) VALUES (
+        COALESCE(NULLIF(draft_rec.draft_payload->'transaction'->>'product_id', '')::uuid, (SELECT id FROM products WHERE sku = draft_rec.draft_payload->>'sku' LIMIT 1)),
+        draft_rec.draft_payload->'transaction'->>'type',
+        (draft_rec.draft_payload->'transaction'->>'quantity')::numeric,
+        (draft_rec.draft_payload->'transaction'->>'previous_stock')::numeric,
+        (draft_rec.draft_payload->'transaction'->>'new_stock')::numeric,
+        COALESCE(draft_rec.draft_payload->'transaction'->>'reason', 'Admin Published Stock Change'),
+        COALESCE(draft_rec.draft_payload->'transaction'->>'reference', ''),
+        p_published_by
+      );
+    END IF;
+  END LOOP;
+
+  -- Clear draft table
+  DELETE FROM product_drafts;
+
+  -- Record publication version
+  IF v_changes_count > 0 THEN
+    INSERT INTO inventory_versions (published_by, changes_count, note, changes_summary)
+    VALUES (p_published_by, v_changes_count, p_note, v_changes_log)
+    RETURNING version INTO v_new_version;
+  ELSE
+    SELECT COALESCE(MAX(version), 1) INTO v_new_version FROM inventory_versions;
+  END IF;
+
+  RETURN v_new_version;
+END;
+$$;
+
+-- RLS POLICIES FOR DRAFTS & VERSIONS
+ALTER TABLE product_drafts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_versions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public drafts access" ON product_drafts FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public versions access" ON inventory_versions FOR ALL USING (true) WITH CHECK (true);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE inventory_versions;
 
 -- STORAGE BUCKET CREATION FOR PRODUCT PHOTOS
 INSERT INTO storage.buckets (id, name, public) 
