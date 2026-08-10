@@ -121,7 +121,7 @@ export async function recordStockMovement(params: {
       const { data, error } = await supabase
         .from('stock_transactions')
         .insert([{
-          product_id: transactionData.product_id,
+          product_id: updatedProduct.id,
           type: transactionData.type,
           quantity: transactionData.quantity,
           previous_stock: transactionData.previous_stock,

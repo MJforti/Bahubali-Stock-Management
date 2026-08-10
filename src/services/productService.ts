@@ -3,14 +3,23 @@ import { Product, RealtimeStatus } from '../types/inventory';
 import { INITIAL_PRODUCTS } from '../data/seedData';
 
 const LOCAL_PRODUCTS_KEY = 'bahubali_products_data';
+const CACHE_VERSION_KEY = 'bahubali_cache_v2_uuid';
 
 export function getLocalProducts(): Product[] {
   try {
+    // Automatic Purge of legacy 'p1' string ID cache
+    const version = localStorage.getItem(CACHE_VERSION_KEY);
+    if (!version) {
+      localStorage.removeItem(LOCAL_PRODUCTS_KEY);
+      localStorage.removeItem('bahubali_stock_transactions');
+      localStorage.setItem(CACHE_VERSION_KEY, 'v2');
+      return INITIAL_PRODUCTS;
+    }
+
     const data = localStorage.getItem(LOCAL_PRODUCTS_KEY);
     if (data) {
       const parsed: Product[] = JSON.parse(data);
-      // Migration: if cached products use legacy 'p1' ID format, clear cache to force fresh UUID sync from Supabase
-      if (parsed.length > 0 && parsed[0].id.startsWith('p1')) {
+      if (parsed.length > 0 && (parsed[0].id.startsWith('p1') || parsed[0].id.startsWith('p-'))) {
         localStorage.removeItem(LOCAL_PRODUCTS_KEY);
         return INITIAL_PRODUCTS;
       }
