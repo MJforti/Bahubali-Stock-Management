@@ -13,7 +13,7 @@ import { InventoryDataSheet } from './components/datasheet/InventoryDataSheet';
 import { ExcelImportModal } from './components/excel/ExcelImportModal';
 import { isUpdateReady, onUpdateReady, applyUpdate } from './pwa';
 import { NamePicker } from './components/auth/NamePicker';
-import { getCurrentStaff, setCurrentStaff } from './lib/staffNames';
+import { getCurrentStaff, setCurrentStaff, importNamesFromUrl } from './lib/staffNames';
 import { BackupModal } from './components/settings/BackupModal';
 
 import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
@@ -29,7 +29,9 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [userRole, setUserRole] = useState<UserRole>('staff'); // STAFF VIEW BY DEFAULT
   const [currentStaff, setCurrentStaffState] = useState<string | null>(() => getCurrentStaff());
-  const [namePickerOpen, setNamePickerOpen] = useState(false);
+  // Opened from a shared name-list QR/link: add the names, then show the picker
+  const [sharedImport] = useState(() => importNamesFromUrl());
+  const [namePickerOpen, setNamePickerOpen] = useState(() => sharedImport !== null);
   const pickStaff = (name: string) => {
     setCurrentStaff(name);
     setCurrentStaffState(name);
@@ -437,6 +439,13 @@ export function App() {
       {/* Who's using the app */}
       {(!currentStaff || namePickerOpen) && (
         <NamePicker
+          notice={
+            sharedImport
+              ? sharedImport.added
+                ? `Added ${sharedImport.added} ${sharedImport.added === 1 ? 'name' : 'names'} from the other phone`
+                : 'This phone already had every name on that list'
+              : null
+          }
           current={currentStaff}
           canClose={!!currentStaff}
           onPick={pickStaff}

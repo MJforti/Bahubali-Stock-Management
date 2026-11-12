@@ -1,8 +1,17 @@
-import React, { useState } from 'react';
-import { UserRound, Plus, X, Check } from 'lucide-react';
-import { cleanName, getStaffNames, saveStaffNames } from '../../lib/staffNames';
+import React, { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
+import { UserRound, Plus, X, Check, QrCode, ClipboardPaste, ArrowLeft, Copy, Share2 } from 'lucide-react';
+import {
+  cleanName,
+  decodeNames,
+  getStaffNames,
+  mergeStaffNames,
+  saveStaffNames,
+  shareLinkForNames
+} from '../../lib/staffNames';
 
 interface NamePickerProps {
+  notice?: string | null;
   current: string | null;
   canClose: boolean;
   onPick: (name: string) => void;
@@ -10,11 +19,58 @@ interface NamePickerProps {
 }
 
 /** "Who's using the app?" Every stock movement is recorded under the chosen name. */
-export const NamePicker: React.FC<NamePickerProps> = ({ current, canClose, onPick, onClose }) => {
+export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClose, onPick, onClose }) => {
   const [names, setNames] = useState<string[]>(() => getStaffNames());
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<'list' | 'share' | 'import'>('list');
+  const [qr, setQr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [pasted, setPasted] = useState('');
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+
+  const link = names.length ? shareLinkForNames(names) : '';
+
+  useEffect(() => {
+    if (view !== 'share' || !link) return;
+    QRCode.toDataURL(link, { margin: 1, width: 480, color: { dark: '#111112', light: '#ffffff' } })
+      .then(setQr)
+      .catch(() => setQr(null));
+  }, [view, link]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const shareLink = async () => {
+    try {
+      await navigator.share({ title: 'Bahubali staff names', text: 'Open to add our staff names to the stock app', url: link });
+    } catch {
+      /* cancelled */
+    }
+  };
+
+  const importPasted = (e: React.FormEvent) => {
+    e.preventDefault();
+    const incoming = decodeNames(pasted);
+    if (!incoming) {
+      setImportMsg('That is not a name list code. Copy the whole link from the other phone');
+      return;
+    }
+    const added = mergeStaffNames(incoming);
+    setNames(getStaffNames());
+    setPasted('');
+    setImportMsg(null);
+    setView('list');
+    setError(added ? null : 'Those names are already on this phone');
+  };
 
   const addName = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +101,7 @@ export const NamePicker: React.FC<NamePickerProps> = ({ current, canClose, onPic
           <div>
             <h2 className="text-lg font-medium text-slate-100">Who's using the app?</h2>
             <p className="mt-1 text-sm text-slate-500">Stock ins and stock outs are recorded under your name</p>
+            {notice && view === 'list' && <p className="mt-2 text-sm text-emerald-400">{notice}</p>}
           </div>
           {canClose && (
             <button onClick={onClose} aria-label="Close" className="w-9 h-9 shrink-0 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors">
@@ -53,6 +110,64 @@ export const NamePicker: React.FC<NamePickerProps> = ({ current, canClose, onPic
           )}
         </div>
 
+        {view === 'share' && (
+          <div className="px-5 pb-5 space-y-4">
+            <button onClick={() => setView('list')} className="h-8 -ml-1 px-1 text-sm text-slate-400 hover:text-slate-100 flex items-center gap-1.5 transition-colors">
+              <ArrowLeft className="w-4 h-4" strokeWidth={1.5} /> Back
+            </button>
+            <p className="text-sm text-slate-400">
+              Scan this with the other phone's camera. If the app is installed on that phone's home screen, send the link instead and paste it under Get from another phone
+            </p>
+            <div className="mx-auto w-56 h-56 rounded-xl bg-white p-2 flex items-center justify-center">
+              {qr ? <img src={qr} alt="Name list QR code" className="w-full h-full" /> : <QrCode className="w-10 h-10 text-slate-400" />}
+            </div>
+            <p className="text-center text-sm text-slate-500">{names.length} names: {names.join(', ')}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={copyLink} className="h-11 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-100 text-[15px] flex items-center justify-center gap-2 transition-colors">
+                {copied ? <Check className="w-4 h-4 text-emerald-400" strokeWidth={1.5} /> : <Copy className="w-4 h-4 text-slate-400" strokeWidth={1.5} />}
+                {copied ? 'Copied' : 'Copy link'}
+              </button>
+              {'share' in navigator ? (
+                <button onClick={shareLink} className="h-11 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-100 text-[15px] flex items-center justify-center gap-2 transition-colors">
+                  <Share2 className="w-4 h-4 text-slate-400" strokeWidth={1.5} /> Send
+                </button>
+              ) : <span />}
+            </div>
+          </div>
+        )}
+
+        {view === 'import' && (
+          <form onSubmit={importPasted} className="px-5 pb-5 space-y-3">
+            <button type="button" onClick={() => setView('list')} className="h-8 -ml-1 px-1 text-sm text-slate-400 hover:text-slate-100 flex items-center gap-1.5 transition-colors">
+              <ArrowLeft className="w-4 h-4" strokeWidth={1.5} /> Back
+            </button>
+            <p className="text-sm text-slate-400">
+              On a phone that has the list, open the name picker, choose Share list and copy the link. Paste it here
+            </p>
+            <textarea
+              value={pasted}
+              onChange={(e) => {
+                setPasted(e.target.value);
+                setImportMsg(null);
+              }}
+              rows={3}
+              autoFocus
+              placeholder="Paste link or code"
+              className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-600 resize-none"
+            />
+            {importMsg && <p className="text-sm text-rose-400">{importMsg}</p>}
+            <button
+              type="submit"
+              disabled={!pasted.trim()}
+              className="w-full h-12 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[15px] font-semibold transition-colors active:scale-[0.98] disabled:opacity-50"
+            >
+              Add these names
+            </button>
+          </form>
+        )}
+
+        {view === 'list' && (
+          <>
         {names.length > 0 && (
           <ul className="px-3 max-h-[50vh] overflow-y-auto">
             {names.map((name) => (
@@ -123,6 +238,23 @@ export const NamePicker: React.FC<NamePickerProps> = ({ current, canClose, onPic
             </button>
           )}
         </form>
+          <div className="px-5 pb-5 -mt-1 grid grid-cols-2 gap-2 border-t border-slate-800 pt-4">
+            <button
+              onClick={() => setView('share')}
+              disabled={names.length === 0}
+              className="h-10 rounded-lg text-sm text-slate-300 hover:bg-slate-850 flex items-center justify-center gap-2 transition-colors disabled:opacity-40"
+            >
+              <QrCode className="w-4 h-4 text-slate-500" strokeWidth={1.5} /> Share list
+            </button>
+            <button
+              onClick={() => setView('import')}
+              className="h-10 rounded-lg text-sm text-slate-300 hover:bg-slate-850 flex items-center justify-center gap-2 transition-colors"
+            >
+              <ClipboardPaste className="w-4 h-4 text-slate-500" strokeWidth={1.5} /> Get from another phone
+            </button>
+          </div>
+          </>
+        )}
       </div>
     </div>
   );
