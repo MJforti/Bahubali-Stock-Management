@@ -34,3 +34,9 @@ export function formatQty(n: number) {
 export function formatPrice(n: number) {
   return `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }
+
+/** Older entries saved a placeholder instead of an empty reason; don't show those. */
+export function realReason(reason?: string) {
+  const r = (reason || '').trim();
+  return r && r !== 'Stock In Addition' && r !== 'Stock Out Issue' ? r : '';
+}

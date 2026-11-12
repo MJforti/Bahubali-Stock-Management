@@ -18,6 +18,7 @@
 import { Product, StockTransaction } from '../types/inventory';
 import { PRODUCTS, TRANSACTIONS, withTransaction, notifyOtherTabs } from './localDb';
 import { RosterEntry, getRoster, mergeRoster } from './staffNames';
+import { ActivityEntry, fetchActivity, mergeActivity } from './activity';
 
 export interface SyncFile {
   app: 'bahubali-stock-management';
@@ -28,6 +29,7 @@ export interface SyncFile {
   products: Product[];
   stock_transactions: StockTransaction[];
   staff_roster: RosterEntry[];
+  activity?: ActivityEntry[];
 }
 
 export interface SyncResult {
@@ -38,6 +40,7 @@ export interface SyncResult {
   negative: string[];
   namesAdded: string[];
   namesRemoved: string[];
+  newActivity: number;
 }
 
 const time = (iso?: string) => (iso ? new Date(iso).getTime() || 0 : 0);
@@ -72,7 +75,8 @@ function deriveOpening(p: Product, txs: StockTransaction[]): number {
 
 /** Everything this phone knows, ready to send. */
 export async function buildSyncFile(from: string | null): Promise<SyncFile> {
-  return withTransaction([PRODUCTS, TRANSACTIONS], async (tx) => {
+  const activity = await fetchActivity();
+  const file = await withTransaction([PRODUCTS, TRANSACTIONS], async (tx) => {
     const products = (await reqAll<Product>(tx.objectStore(PRODUCTS))) as Product[];
     const txs = (await reqAll<StockTransaction>(tx.objectStore(TRANSACTIONS))) as StockTransaction[];
     const byProduct = groupBy(txs);
@@ -91,9 +95,11 @@ export async function buildSyncFile(from: string | null): Promise<SyncFile> {
       exported_at: new Date().toISOString(),
       products: pinned,
       stock_transactions: txs.map(stripDisplayFields),
-      staff_roster: getRoster()
+      staff_roster: getRoster(),
+      activity
     } as SyncFile;
   });
+  return file;
 }
 
 export function isSyncFile(x: any): x is SyncFile {
@@ -117,7 +123,8 @@ export async function mergeSyncFile(file: SyncFile): Promise<SyncResult> {
     stockChanged: 0,
     negative: [],
     namesAdded: [],
-    namesRemoved: []
+    namesRemoved: [],
+    newActivity: 0
   };
 
   await withTransaction([PRODUCTS, TRANSACTIONS], async (tx) => {
@@ -190,6 +197,8 @@ export async function mergeSyncFile(file: SyncFile): Promise<SyncResult> {
     result.namesRemoved = names.removed;
   }
 
+  result.newActivity = await mergeActivity(file.activity);
+
   notifyOtherTabs({ kind: 'reload' });
   return result;
 }
@@ -203,6 +212,7 @@ export function describeSync(r: SyncResult): string[] {
   if (r.updatedProducts) lines.push(`Details updated for ${n(r.updatedProducts, 'product', 'products')}`);
   if (r.namesAdded.length) lines.push(`Added ${r.namesAdded.join(', ')} to the staff list`);
   if (r.namesRemoved.length) lines.push(`Removed ${r.namesRemoved.join(', ')} from the staff list`);
+  if (r.newActivity) lines.push(`${n(r.newActivity, 'new history entry', 'new history entries')}`);
   if (!lines.length) lines.push('This phone was already up to date');
   return lines;
 }

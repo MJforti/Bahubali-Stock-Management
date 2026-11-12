@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Lock, X, AlertCircle } from 'lucide-react';
+import { logActivity } from '../../lib/activity';
 import { verifyAdminPasscode } from '../../lib/localDb';
 
 interface AdminPasscodeModalProps {
@@ -36,7 +37,8 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
         setError(null);
         onSuccess();
       } else {
-        setError('Incorrect Admin Code. Access denied.');
+        logActivity('people.admin_failed', 'Entered a wrong admin code');
+        setError('Wrong admin code');
       }
     } catch (err) {
       setError('Verification error. Please try again.');

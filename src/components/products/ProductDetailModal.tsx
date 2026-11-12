@@ -26,6 +26,7 @@ interface ProductDetailModalProps {
   onOpenStockOut: (product: Product) => void;
   onOpenAdjustment: (product: Product) => void;
   onOpenEditProduct: (product: Product) => void;
+  onRemoveProduct: (product: Product) => Promise<void>;
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
@@ -36,7 +37,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onOpenStockIn,
   onOpenStockOut,
   onOpenAdjustment,
-  onOpenEditProduct
+  onOpenEditProduct,
+  onRemoveProduct
 }) => {
   if (!product) return null;
 
@@ -61,15 +63,18 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => onOpenEditProduct(product)}
-              className="p-2 rounded-xl bg-slate-900 text-slate-300 hover:text-slate-100 border border-slate-800 transition-colors"
-              title="Edit Product Details"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
+            {userRole === 'admin' && (
+              <button
+                onClick={() => onOpenEditProduct(product)}
+                className="p-2 rounded-xl bg-slate-900 text-slate-300 hover:text-slate-100 border border-slate-800 transition-colors"
+                title="Edit product"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={onClose}
+              aria-label="Close"
               className="p-2 rounded-xl bg-slate-900 text-slate-400 hover:text-slate-100 border border-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
@@ -221,6 +226,24 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               )}
             </div>
           </div>
+
+          {userRole === 'admin' && (
+            <div className="border-t border-slate-800 pt-4">
+              <button
+                onClick={async () => {
+                  if (!window.confirm(`Remove ${product.name}? It disappears from the product list. Its stock history is kept, and the removal is recorded in History.`)) return;
+                  try {
+                    await onRemoveProduct(product);
+                  } catch (err: any) {
+                    alert(err?.message || 'Something went wrong. Please try again.');
+                  }
+                }}
+                className="h-10 px-3 rounded-lg text-sm text-rose-400 hover:bg-rose-950 transition-colors"
+              >
+                Remove product
+              </button>
+            </div>
+          )}
 
         </div>
 

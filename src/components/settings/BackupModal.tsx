@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { X, Send, FileDown, Download, Upload, AlertTriangle, Loader2 } from 'lucide-react';
 import { exportBackup, restoreBackup, notifyOtherTabs } from '../../lib/localDb';
+import { logActivity } from '../../lib/activity';
 import { buildSyncFile, describeSync, isSyncFile, mergeSyncFile } from '../../lib/stockSync';
 
 interface BackupModalProps {
@@ -9,6 +10,10 @@ interface BackupModalProps {
   onClose: () => void;
   onRestored: () => void;
 }
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const counts = (d: { products: unknown[]; stock_transactions: unknown[] }, sep = ' and ') =>
+  `${plural(d.products.length, 'product', 'products')}${sep}${plural(d.stock_transactions.length, 'movement', 'movements')}`;
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -46,10 +51,11 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, staffName, on
       const stamp = new Date().toISOString().slice(0, 16).replace(/\D/g, ''); // e.g. 202611121737
       const name = `bahubali-stock-${staffName ? slug(staffName) + '-' : ''}${stamp}.json`;
       const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
-      const summary = `${data.products.length} products and ${data.stock_transactions.length} movements`;
+      const summary = counts(data);
       if (navigator.canShare?.({ files: [file] })) {
         try {
           await navigator.share({ files: [file], title: 'Bahubali stock', text: 'Open in the Bahubali stock app: Share and backup, Get stock from another phone' });
+          await logActivity('data.sent', 'Sent stock to another phone', { details: [summary] });
           return [`Sent ${summary}`];
         } catch (err: any) {
           // Closing the share menu is not an error. Anything else (e.g. desktop Chrome
@@ -58,6 +64,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, staffName, on
         }
       }
       saveFile(file);
+      await logActivity('data.sent', 'Saved a stock file to send to another phone', { details: [summary] });
       return [`Saved ${summary} as ${name}`, 'Send this file to the other phone, for example on WhatsApp'];
     });
 
@@ -75,6 +82,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, staffName, on
       const result = await mergeSyncFile(data);
       onRestored();
       const lines = describeSync(result);
+      await logActivity('data.received', data.from ? `Merged stock from ${data.from}'s phone` : 'Merged stock from another phone', {
+        details: describeSync(result)
+      });
       if (data.from) lines.unshift(`Merged stock from ${data.from}'s phone`);
       if (result.negative.length) lines.push(`Below zero after merging, please recount: ${result.negative.join(', ')}`);
       return lines;
@@ -84,7 +94,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, staffName, on
     run('backup', async () => {
       const data = await exportBackup();
       saveFile(new File([JSON.stringify(data)], `bahubali-backup-${new Date().toISOString().slice(0, 10)}.json`, { type: 'application/json' }));
-      return [`Backup saved: ${data.products.length} products, ${data.stock_transactions.length} movements`];
+      await logActivity('data.backup', 'Downloaded a backup', { details: [counts(data, ', ')] });
+      return [`Backup saved: ${counts(data, ', ')}`];
     });
 
   const restore = (file: File) => {
@@ -92,9 +103,10 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, staffName, on
     run('restore', async () => {
       const data = JSON.parse(await file.text());
       await restoreBackup(data);
+      await logActivity('data.restored', 'Restored everything from a backup', { details: [counts(data, ', ')] });
       notifyOtherTabs({ kind: 'reload' });
       onRestored();
-      return [`Restored ${data.products.length} products and ${data.stock_transactions.length} movements`];
+      return [`Restored ${counts(data)}`];
     });
   };
 

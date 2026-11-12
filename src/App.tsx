@@ -14,6 +14,7 @@ import { ExcelImportModal } from './components/excel/ExcelImportModal';
 import { isUpdateReady, onUpdateReady, applyUpdate } from './pwa';
 import { NamePicker } from './components/auth/NamePicker';
 import { getCurrentStaff, setCurrentStaff, importFromUrl, describeImport, getStaffNames } from './lib/staffNames';
+import { setActor, logActivity, fetchActivity, ActivityEntry } from './lib/activity';
 import { BackupModal } from './components/settings/BackupModal';
 
 import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
@@ -44,6 +45,15 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const pickStaff = (name: string) => {
+    if (name !== currentStaff) {
+      // A different person must enter the admin code themselves
+      if (userRole === 'admin' && currentStaff) {
+        logActivity('people.admin_off', `Admin mode ended because ${name} took over`);
+        setUserRole('staff');
+      }
+      setActor(name, 'staff');
+      logActivity('people.switched', currentStaff ? `${name} took over from ${currentStaff}` : `${name} started using this phone`);
+    }
     setCurrentStaff(name);
     setCurrentStaffState(name);
     setNamePickerOpen(false);
@@ -138,8 +148,11 @@ export function App() {
         setProducts((prev) => prev.filter((p) => p.id !== change.id));
       } else if (change.kind === 'transaction') {
         setTransactions((prev) => [change.transaction, ...prev.filter((t) => t.id !== change.transaction.id)]);
+      } else if (change.kind === 'activity') {
+        window.dispatchEvent(new CustomEvent('bahubali-activity'));
       } else {
         loadData();
+        window.dispatchEvent(new CustomEvent('bahubali-activity'));
       }
     });
 
@@ -156,13 +169,40 @@ export function App() {
     }
   }, [products]);
 
+  // Who is acting, for the activity log
+  useEffect(() => {
+    setActor(currentStaff, userRole);
+  }, [currentStaff, userRole]);
+
+  // Activity log for the History page
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const loadActivity = useCallback(() => {
+    fetchActivity().then(setActivity).catch((err) => console.error('Could not load activity', err));
+  }, []);
+  useEffect(() => {
+    loadActivity();
+    window.addEventListener('bahubali-activity', loadActivity);
+    return () => window.removeEventListener('bahubali-activity', loadActivity);
+  }, [loadActivity]);
+
+  const leaveAdmin = () => {
+    logActivity('people.admin_off', 'Left admin mode');
+    setUserRole('staff');
+  };
+
   // Role Switcher
   const handleRoleChangeRequest = (role: UserRole) => {
     if (role === 'admin') {
       setAdminAuthOpen(true);
     } else {
-      setUserRole('staff');
+      leaveAdmin();
     }
+  };
+
+  const handleRemoveProduct = async (product: Product) => {
+    const updated = await updateProduct(product.id, { is_active: false });
+    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    setSelectedProductForDetail(null);
   };
 
   // Direct Stock Movement Handlers
@@ -266,9 +306,16 @@ export function App() {
   };
 
   const handleConfirmExcelImport = async (importedProducts: Partial<Product>[]) => {
+    const names: string[] = [];
     for (const prodData of importedProducts) {
-      const created = await createProduct(prodData as any);
+      const created = await createProduct(prodData as any, { silent: true });
+      names.push(created.name);
       setProducts((prev) => (prev.some((p) => p.id === created.id) ? prev : [created, ...prev]));
+    }
+    if (names.length) {
+      await logActivity('product.imported', `Imported ${names.length} ${names.length === 1 ? 'product' : 'products'} from Excel`, {
+        details: names.length > 8 ? [...names.slice(0, 8), `and ${names.length - 8} more`] : names
+      });
     }
   };
 
@@ -301,7 +348,7 @@ export function App() {
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
             Admin mode
           </span>
-          <button onClick={() => setUserRole('staff')} className="text-slate-500 hover:text-slate-100 transition-colors">
+          <button onClick={leaveAdmin} className="text-slate-500 hover:text-slate-100 transition-colors">
             Leave
           </button>
         </div>
@@ -365,12 +412,15 @@ export function App() {
             onOpenStockOut={(prod) => handleOpenStockOut(prod)}
             onOpenEditProduct={(prod) => setProductForm({ open: true, product: prod })}
             onOpenImportModal={() => setImportModalOpen(true)}
-            onExportExcel={() => exportInventoryToExcel(products)}
+            onExportExcel={() => {
+              exportInventoryToExcel(products);
+              logActivity('data.exported', `Exported ${products.filter((p) => p.is_active !== false).length} products to Excel`);
+            }}
           />
         )}
 
         {activeTab === 'history' && (
-          <StockHistoryView transactions={transactions} />
+          <StockHistoryView transactions={transactions} activity={activity} products={products} />
         )}
 
         {activeTab === 'datasheet' && (
@@ -406,6 +456,7 @@ export function App() {
           onOpenStockOut={(prod) => handleOpenStockOut(prod)}
           onOpenAdjustment={(prod) => setAdjustmentProduct(prod)}
           onOpenEditProduct={(prod) => setProductForm({ open: true, product: prod })}
+          onRemoveProduct={handleRemoveProduct}
         />
       )}
 
@@ -474,6 +525,8 @@ export function App() {
         isOpen={adminAuthOpen}
         onClose={() => setAdminAuthOpen(false)}
         onSuccess={() => {
+          setActor(currentStaff, 'admin');
+          logActivity('people.admin_on', 'Entered admin mode');
           setUserRole('admin');
           setAdminAuthOpen(false);
         }}

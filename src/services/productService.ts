@@ -1,4 +1,5 @@
 import { Product, RealtimeStatus } from '../types/inventory';
+import { diffProduct, logActivity } from '../lib/activity';
 import { PRODUCTS, getAll, withTransaction, assertSkuFree, newId, notifyOtherTabs } from '../lib/localDb';
 
 export function normalizeProduct(p: any): Product {
@@ -20,7 +21,10 @@ export async function fetchProducts(): Promise<{ products: Product[]; realtimeSt
   return { products, realtimeStatus: 'local_demo' };
 }
 
-export async function createProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
+export async function createProduct(
+  productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>,
+  opts: { silent?: boolean } = {}
+): Promise<Product> {
   const now = new Date().toISOString();
   const product = normalizeProduct({
     ...productData,
@@ -39,14 +43,23 @@ export async function createProduct(productData: Omit<Product, 'id' | 'created_a
   });
 
   notifyOtherTabs({ kind: 'product', product });
+  if (!opts.silent) {
+    await logActivity('product.created', `Added ${product.name}`, {
+      product_id: product.id,
+      product_name: product.name,
+      details: [`Opening stock ${product.current_stock} ${product.unit}`, product.rack ? `Rack ${product.rack}` : ''].filter(Boolean)
+    });
+  }
   return product;
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
   const { id: _id, created_at: _c, ...rest } = updates as any;
 
+  let before: Product | undefined;
   const updated = await withTransaction([PRODUCTS], async (tx, get) => {
     const existing = await get<Product>(PRODUCTS, id);
+    before = existing;
     if (!existing) throw new Error('Product not found.');
     const now = new Date().toISOString();
     const next = normalizeProduct({ ...existing, ...rest, id, updated_at: now, details_updated_at: now });
@@ -56,6 +69,20 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   });
 
   notifyOtherTabs({ kind: 'product', product: updated });
+
+  if (before) {
+    const wasActive = before.is_active !== false;
+    if (wasActive && updated.is_active === false) {
+      await logActivity('product.removed', `Removed ${updated.name}`, { product_id: id, product_name: updated.name });
+    } else if (!wasActive && updated.is_active !== false) {
+      await logActivity('product.restored', `Brought back ${updated.name}`, { product_id: id, product_name: updated.name });
+    } else {
+      const changes = diffProduct(before, updated);
+      if (changes.length) {
+        await logActivity('product.updated', `Edited ${updated.name}`, { product_id: id, product_name: updated.name, changes });
+      }
+    }
+  }
   return updated;
 }
 

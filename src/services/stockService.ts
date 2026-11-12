@@ -47,7 +47,7 @@ export async function recordStockMovement(params: {
     throw new Error('A mandatory audit reason is required for manual stock adjustments.');
   }
 
-  const finalReason = reason || (type === 'IN' ? 'Stock In Addition' : type === 'OUT' ? 'Stock Out Issue' : '');
+  const finalReason = (reason || '').trim();
 
   const result = await withTransaction([PRODUCTS, TRANSACTIONS], async (tx, get) => {
     const stored = await get<Product>(PRODUCTS, params.product.id);

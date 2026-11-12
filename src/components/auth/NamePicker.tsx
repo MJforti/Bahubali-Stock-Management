@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Loader2, UserRound, Plus, X, Check, QrCode, ClipboardPaste, ArrowLeft, Copy, Share2 } from 'lucide-react';
+import { logActivity } from '../../lib/activity';
 import {
   addStaffName,
   cleanName,
@@ -124,6 +125,9 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
       return;
     }
     const result = mergeRoster(incoming);
+    if (result.added.length || result.removed.length) {
+      logActivity('people.list_received', 'Updated the staff list from another phone', { details: [describeImport(result)] });
+    }
     const next = getStaffNames();
     setNames(next);
     setPasted('');
@@ -143,11 +147,13 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
     }
     addStaffName(name);
     setNames(getStaffNames());
+    logActivity('people.added', `Added ${name} to the staff list`);
     onPick(name);
   };
 
   const removeName = (name: string) => {
     removeStaffName(name);
+    logActivity('people.removed', `Removed ${name} from the staff list`);
     const next = getStaffNames();
     setNames(next);
     onListChanged(next);

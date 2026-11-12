@@ -82,7 +82,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
         product: selectedProduct,
         type,
         quantity,
-        reason: reason.trim() || (type === 'IN' ? 'Stock In Addition' : 'Stock Out Issue'),
+        reason: reason.trim(),
         reference: reference.trim()
       });
       onClose();

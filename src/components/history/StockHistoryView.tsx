@@ -1,151 +1,373 @@
-import React, { useState, useMemo } from 'react';
-import { Search } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import {
+  Search,
+  PackagePlus,
+  PencilLine,
+  Trash2,
+  RotateCcw,
+  FileSpreadsheet,
+  UserPlus,
+  UserMinus,
+  UserRound,
+  Users,
+  LockOpen,
+  Lock,
+  ShieldAlert,
+  Send,
+  FileDown,
+  Download,
+  Upload,
+  Package
+} from 'lucide-react';
 import { ProductThumb } from '../ui/ProductThumb';
-import { formatQty } from '../ui/stock';
-import { StockTransaction, TransactionType } from '../../types/inventory';
+import { realReason, formatQty } from '../ui/stock';
+import { Product, StockTransaction } from '../../types/inventory';
+import { ActivityAction, ActivityEntry, FieldChange } from '../../lib/activity';
 
 interface StockHistoryViewProps {
   transactions: StockTransaction[];
+  activity: ActivityEntry[];
+  products: Product[];
 }
 
-export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState<string>('ALL');
-  const [selectedUser, setSelectedUser] = useState<string>('ALL');
+type Section = 'all' | 'stock' | 'product' | 'people' | 'data';
+type Period = 'all' | 'today' | '7d' | '30d';
 
-  const usersList = useMemo(() => {
-    const set = new Set(transactions.map((t) => t.user_name).filter(Boolean));
-    return ['ALL', ...Array.from(set)];
-  }, [transactions]);
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'stock', label: 'Stock' },
+  { id: 'product', label: 'Products' },
+  { id: 'people', label: 'People and access' },
+  { id: 'data', label: 'Sharing and backup' }
+];
 
-  const filteredTransactions = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return transactions.filter((t) => {
-      // Type filter
-      if (selectedType !== 'ALL' && t.type !== selectedType) return false;
+const SECTION_HINT: Record<Section, string> = {
+  all: 'Everything that happened, newest first',
+  stock: 'Stock in, stock out and count corrections',
+  product: 'Products added, edited, removed or imported',
+  people: 'Staff list changes, who used the phone, and admin mode',
+  data: 'Stock sent to or received from other phones, backups and exports'
+};
 
-      // User filter
-      if (selectedUser !== 'ALL' && t.user_name !== selectedUser) return false;
+const ACTION_ICON: Record<ActivityAction, typeof Package> = {
+  'product.created': PackagePlus,
+  'product.updated': PencilLine,
+  'product.removed': Trash2,
+  'product.restored': RotateCcw,
+  'product.imported': FileSpreadsheet,
+  'people.added': UserPlus,
+  'people.removed': UserMinus,
+  'people.list_received': Users,
+  'people.switched': UserRound,
+  'people.admin_on': LockOpen,
+  'people.admin_off': Lock,
+  'people.admin_failed': ShieldAlert,
+  'data.sent': Send,
+  'data.received': FileDown,
+  'data.backup': Download,
+  'data.restored': Upload,
+  'data.exported': FileSpreadsheet
+};
 
-      // Query matching product name, SKU, brand, reason, reference
-      if (q) {
-        const prodMatch = (t.product_name || '').toLowerCase().includes(q);
-        const skuMatch = (t.product_sku || '').toLowerCase().includes(q);
-        const brandMatch = (t.product_brand || '').toLowerCase().includes(q);
-        const userMatch = (t.user_name || '').toLowerCase().includes(q);
-        const reasonMatch = (t.reason || '').toLowerCase().includes(q);
-        const refMatch = (t.reference || '').toLowerCase().includes(q);
+/** One row in the list, whether it came from a stock movement or the activity log. */
+interface Row {
+  id: string;
+  at: string;
+  user: string;
+  role?: 'admin' | 'staff';
+  section: Exclude<Section, 'all'>;
+  searchText: string;
+  tx?: StockTransaction;
+  entry?: ActivityEntry;
+}
 
-        return prodMatch || skuMatch || brandMatch || userMatch || reasonMatch || refMatch;
-      }
+const PAGE = 60;
 
+export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions, activity, products }) => {
+  const [section, setSection] = useState<Section>('all');
+  const [query, setQuery] = useState('');
+  const [person, setPerson] = useState('ALL');
+  const [period, setPeriod] = useState<Period>('all');
+  const [stockType, setStockType] = useState<'ALL' | 'IN' | 'OUT' | 'ADJUSTMENT'>('ALL');
+  const [limit, setLimit] = useState(PAGE);
+
+  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  const rows: Row[] = useMemo(() => {
+    const stockRows: Row[] = transactions.map((t) => {
+      const p = productById.get(t.product_id);
+      return {
+        id: `tx-${t.id}`,
+        at: t.created_at,
+        user: t.user_name || 'Staff',
+        section: 'stock',
+        searchText: [p?.name, t.product_name, p?.brand, p?.sku, t.user_name, t.reason, t.reference].join(' ').toLowerCase(),
+        tx: t
+      };
+    });
+    const activityRows: Row[] = activity.map((e) => ({
+      id: `act-${e.id}`,
+      at: e.created_at,
+      user: e.user,
+      role: e.role,
+      section: e.category,
+      searchText: [e.summary, e.user, e.product_name, ...(e.details || []), ...(e.changes || []).map((c) => `${c.field} ${c.from} ${c.to}`)]
+        .join(' ')
+        .toLowerCase(),
+      entry: e
+    }));
+    return [...stockRows, ...activityRows].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  }, [transactions, activity, productById]);
+
+  const people = useMemo(() => Array.from(new Set(rows.map((r) => r.user))).sort((a, b) => a.localeCompare(b)), [rows]);
+
+  // Filters other than the section, so the section counts reflect them
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const since =
+      period === 'today'
+        ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
+        : period === '7d'
+        ? Date.now() - 7 * 864e5
+        : period === '30d'
+        ? Date.now() - 30 * 864e5
+        : 0;
+    return rows.filter((r) => {
+      if (person !== 'ALL' && r.user !== person) return false;
+      if (since && new Date(r.at).getTime() < since) return false;
+      if (q && !r.searchText.includes(q)) return false;
       return true;
     });
-  }, [transactions, searchQuery, selectedType, selectedUser]);
+  }, [rows, query, person, period]);
 
-  // Group into days for a register-like reading
+  const counts = useMemo(() => {
+    const c: Record<Section, number> = { all: filtered.length, stock: 0, product: 0, people: 0, data: 0 };
+    filtered.forEach((r) => c[r.section]++);
+    return c;
+  }, [filtered]);
+
+  const visible = useMemo(
+    () =>
+      filtered.filter(
+        (r) => (section === 'all' || r.section === section) && (section !== 'stock' || stockType === 'ALL' || r.tx?.type === stockType)
+      ),
+    [filtered, section, stockType]
+  );
+
   const groups = useMemo(() => {
-    const map = new Map<string, StockTransaction[]>();
-    filteredTransactions.forEach((t) => {
-      const key = new Date(t.created_at).toDateString();
+    const map = new Map<string, Row[]>();
+    visible.slice(0, limit).forEach((r) => {
+      const key = new Date(r.at).toDateString();
       if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(t);
+      map.get(key)!.push(r);
     });
     return Array.from(map.entries());
-  }, [filteredTransactions]);
+  }, [visible, limit]);
 
-  const dayLabel = (key: string) => {
-    const d = new Date(key);
-    const today = new Date();
-    const yesterday = new Date(Date.now() - 86400000);
-    if (d.toDateString() === today.toDateString()) return 'Today';
-    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  };
-
-  const control =
-    'h-10 w-full rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:border-slate-600';
+  const control = 'h-10 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:border-slate-600';
+  const filtersOn = query || person !== 'ALL' || period !== 'all' || (section === 'stock' && stockType !== 'ALL');
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-[28px] leading-tight font-medium text-slate-100">History</h1>
-        <p className="mt-1 text-sm text-slate-500">Every stock in, stock out and count correction, newest first</p>
+        <p className="mt-1 text-sm text-slate-500">Who did what, and when</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <label className="relative block">
+      {/* Sections */}
+      <div className="-mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto scrollbar-none">
+        <div role="tablist" className="inline-flex gap-1 p-1 rounded-xl border border-slate-800 bg-slate-950">
+          {SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              role="tab"
+              aria-selected={section === s.id}
+              onClick={() => {
+                setSection(s.id);
+                setLimit(PAGE);
+              }}
+              className={`h-9 px-3 rounded-lg text-sm whitespace-nowrap flex items-center gap-2 transition-colors ${
+                section === s.id ? 'bg-slate-850 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]' : 'text-slate-400 hover:text-slate-100'
+              }`}
+            >
+              {s.label}
+              <span className={`text-xs ${section === s.id ? 'text-slate-400' : 'text-slate-600'}`}>{counts[s.id]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="-mt-2 text-sm text-slate-500">{SECTION_HINT[section]}</p>
+
+      {/* Filters */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <label className="relative block col-span-2">
           <span className="sr-only">Search</span>
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" strokeWidth={1.5} />
           <input
             type="search"
-            placeholder="Product, person or reason"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={`${control} pl-9 pr-3 placeholder-slate-500`}
+            placeholder="Product, person or detail"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className={`${control} w-full pl-9 pr-3 placeholder-slate-500 text-base sm:text-sm`}
           />
         </label>
-        <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} aria-label="Type" className={`${control} px-3`}>
-          <option value="ALL">All movements</option>
-          <option value="IN">Stock in</option>
-          <option value="OUT">Stock out</option>
-          <option value="ADJUSTMENT">Count corrections</option>
-        </select>
-        <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} aria-label="Person" className={`${control} px-3`}>
-          {usersList.map((u) => (
-            <option key={u} value={u}>{u === 'ALL' ? 'Everyone' : u}</option>
+        <select value={person} onChange={(e) => setPerson(e.target.value)} aria-label="Person" className={`${control} px-3`}>
+          <option value="ALL">Everyone</option>
+          {people.map((u) => (
+            <option key={u} value={u}>{u}</option>
           ))}
         </select>
+        <select value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label="When" className={`${control} px-3`}>
+          <option value="all">Any time</option>
+          <option value="today">Today</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+        </select>
+        {section === 'stock' && (
+          <select value={stockType} onChange={(e) => setStockType(e.target.value as typeof stockType)} aria-label="Type" className={`${control} px-3 col-span-2 md:col-span-1`}>
+            <option value="ALL">In, out and corrections</option>
+            <option value="IN">Stock in</option>
+            <option value="OUT">Stock out</option>
+            <option value="ADJUSTMENT">Count corrections</option>
+          </select>
+        )}
       </div>
 
+      {/* List */}
       {groups.length === 0 ? (
         <div className="rounded-2xl border border-slate-800 bg-slate-900 px-6 py-12 text-center">
-          <p className="text-base text-slate-200">{transactions.length ? 'Nothing matches these filters' : 'No movements yet'}</p>
+          <p className="text-base text-slate-200">{filtersOn ? 'Nothing matches these filters' : 'Nothing here yet'}</p>
           <p className="mt-1 text-sm text-slate-500">
-            {transactions.length ? 'Try another word or filter' : 'Stock ins and stock outs are recorded here automatically'}
+            {filtersOn ? 'Try another word, person or time' : 'Changes are recorded here automatically as people use the app'}
           </p>
         </div>
       ) : (
-        groups.map(([key, items]) => (
-          <section key={key}>
-            <h2 className="mb-2 flex items-baseline justify-between text-sm">
-              <span className="text-slate-300">{dayLabel(key)}</span>
-              <span className="text-slate-500">{items.length} movements</span>
-            </h2>
-            <ul className="rounded-2xl border border-slate-800 bg-slate-900 divide-y divide-slate-800">
-              {items.map((tx) => {
-                const isIn = tx.type === 'IN';
-                const isOut = tx.type === 'OUT';
-                const sign = isIn ? '+' : isOut ? '−' : '';
-                const tone = isIn ? 'text-emerald-400' : isOut ? 'text-rose-400' : 'text-slate-100';
-                const kind = isIn ? 'Stock in' : isOut ? 'Stock out' : 'Count corrected';
-                const time = new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
-                return (
-                  <li key={tx.id} className="flex items-center gap-3 px-4 py-3">
-                    <ProductThumb src={tx.product_image} alt={tx.product_name || 'Product'} size={40} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[15px] text-slate-100 truncate">{tx.product_name || 'Product'}</p>
-                      <p className="mt-0.5 text-sm text-slate-500 truncate">
-                        {kind} · {tx.user_name}
-                        {tx.reason ? ` · ${tx.reason}` : ''}
-                        {tx.reference ? ` · Ref ${tx.reference}` : ''}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className={`text-[15px] font-semibold ${tone}`}>
-                        {sign}{formatQty(tx.quantity)}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {formatQty(tx.previous_stock)} → {formatQty(tx.new_stock)} · {time}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))
+        <>
+          {groups.map(([key, items]) => (
+            <section key={key}>
+              <h2 className="mb-2 flex items-baseline justify-between text-sm">
+                <span className="text-slate-300">{dayLabel(key)}</span>
+                <span className="text-slate-500">{items.length} {items.length === 1 ? 'entry' : 'entries'}</span>
+              </h2>
+              <ul className="rounded-2xl border border-slate-800 bg-slate-900 divide-y divide-slate-800">
+                {items.map((r) => (
+                  <li key={r.id}>{r.tx ? <StockRow tx={r.tx} product={productById.get(r.tx.product_id)} /> : <ActivityRow entry={r.entry!} product={r.entry?.product_id ? productById.get(r.entry.product_id) : undefined} />}</li>
+                ))}
+              </ul>
+            </section>
+          ))}
+          {visible.length > limit && (
+            <button
+              onClick={() => setLimit((l) => l + PAGE)}
+              className="w-full h-11 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 text-sm text-slate-300 transition-colors"
+            >
+              Show more ({visible.length - limit} older)
+            </button>
+          )}
+        </>
       )}
     </div>
   );
 };
+
+// ---------- Rows ----------
+
+const time = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+
+function dayLabel(key: string) {
+  const d = new Date(key);
+  const today = new Date();
+  const yesterday = new Date(Date.now() - 864e5);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+const Who: React.FC<{ user: string; role?: 'admin' | 'staff' }> = ({ user, role }) => (
+  <span className="text-slate-300">
+    {user}
+    {role === 'admin' && <span className="ml-1.5 text-xs text-amber-400">admin</span>}
+  </span>
+);
+
+const StockRow: React.FC<{ tx: StockTransaction; product?: Product }> = ({ tx, product }) => {
+  const isIn = tx.type === 'IN';
+  const isOut = tx.type === 'OUT';
+  const sign = isIn ? '+' : isOut ? '−' : '';
+  const tone = isIn ? 'text-emerald-400' : isOut ? 'text-rose-400' : 'text-slate-100';
+  const kind = isIn ? 'Stock in' : isOut ? 'Stock out' : 'Count corrected';
+  const name = product?.name || tx.product_name || 'Product';
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <ProductThumb src={product?.image_url || tx.product_image} alt={name} size={40} />
+      <div className="flex-1 min-w-0">
+        <p className="text-[15px] text-slate-100 truncate">{name}</p>
+        <p className="mt-0.5 text-sm text-slate-500 truncate">
+          {kind} · <Who user={tx.user_name || 'Staff'} />
+          {realReason(tx.reason) ? ` · ${tx.reason}` : ''}
+          {tx.reference ? ` · Ref ${tx.reference}` : ''}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className={`text-[15px] font-semibold ${tone}`}>
+          {sign}{formatQty(tx.quantity)}
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          {formatQty(tx.previous_stock)} → {formatQty(tx.new_stock)} · {time(tx.created_at)}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+const ActivityRow: React.FC<{ entry: ActivityEntry; product?: Product }> = ({ entry, product }) => {
+  const Icon = ACTION_ICON[entry.action] || Package;
+  const warn = entry.action === 'people.admin_failed' || entry.action === 'product.removed';
+  return (
+    <div className="flex gap-3 px-4 py-3">
+      {product ? (
+        <ProductThumb src={product.image_url} alt={product.name} size={40} />
+      ) : (
+        <div className="w-10 h-10 shrink-0 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center">
+          <Icon className={`w-[18px] h-[18px] ${warn ? 'text-rose-400' : 'text-slate-500'}`} strokeWidth={1.5} />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className={`text-[15px] ${warn ? 'text-rose-300' : 'text-slate-100'}`}>{entry.summary}</p>
+          <span className="shrink-0 text-xs text-slate-500">{time(entry.created_at)}</span>
+        </div>
+        <p className="mt-0.5 text-sm text-slate-500">
+          <Who user={entry.user} role={entry.role} />
+        </p>
+        {entry.changes && entry.changes.length > 0 && <Changes changes={entry.changes} />}
+        {entry.details && entry.details.length > 0 && (
+          <ul className="mt-2 space-y-0.5 text-sm text-slate-400">
+            {entry.details.map((d, i) => (
+              <li key={i}>{d}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const Changes: React.FC<{ changes: FieldChange[] }> = ({ changes }) => (
+  <dl className="mt-2 rounded-lg border border-slate-800 bg-slate-950 divide-y divide-slate-800 text-sm">
+    {changes.map((c, i) => (
+      <div key={i} className="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-3 px-3 py-1.5">
+        <dt className="text-slate-500 truncate">{c.field}</dt>
+        <dd className="min-w-0 text-slate-300 break-words">
+          {c.from ? (
+            <>
+              <span className="text-slate-500 line-through decoration-slate-600">{c.from}</span>
+              <span className="mx-1.5 text-slate-600">→</span>
+            </>
+          ) : null}
+          <span className="text-slate-100">{c.to}</span>
+        </dd>
+      </div>
+    ))}
+  </dl>
+);

@@ -9,9 +9,10 @@ import { Product, StockTransaction } from '../types/inventory';
 import { INITIAL_PRODUCTS } from '../data/seedData';
 
 const DB_NAME = 'bahubali_inventory';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // 2: activity log
 export const PRODUCTS = 'products';
 export const TRANSACTIONS = 'stock_transactions';
+export const ACTIVITY = 'activity';
 const META = 'meta';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -51,6 +52,10 @@ export function openDb(): Promise<IDBDatabase> {
           s.createIndex('created_at', 'created_at');
         }
         if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
+        if (!db.objectStoreNames.contains(ACTIVITY)) {
+          const s = db.createObjectStore(ACTIVITY, { keyPath: 'id' });
+          s.createIndex('created_at', 'created_at');
+        }
       };
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);
@@ -127,6 +132,7 @@ export interface BackupFile {
   exported_at: string;
   products: Product[];
   stock_transactions: StockTransaction[];
+  activity?: unknown[];
 }
 
 export async function exportBackup(): Promise<BackupFile> {
@@ -135,7 +141,8 @@ export async function exportBackup(): Promise<BackupFile> {
     version: 1,
     exported_at: new Date().toISOString(),
     products: await getAll<Product>(PRODUCTS),
-    stock_transactions: await getAll<StockTransaction>(TRANSACTIONS)
+    stock_transactions: await getAll<StockTransaction>(TRANSACTIONS),
+    activity: await getAll<unknown>(ACTIVITY)
   };
 }
 
@@ -143,11 +150,16 @@ export async function restoreBackup(data: BackupFile): Promise<void> {
   if (!data || data.app !== 'bahubali-stock-management' || !Array.isArray(data.products) || !Array.isArray(data.stock_transactions)) {
     throw new Error('This is not a valid Bahubali backup file.');
   }
-  await withTransaction([PRODUCTS, TRANSACTIONS, META], async (tx) => {
+  await withTransaction([PRODUCTS, TRANSACTIONS, ACTIVITY, META], async (tx) => {
     tx.objectStore(PRODUCTS).clear();
     tx.objectStore(TRANSACTIONS).clear();
     data.products.forEach((p) => tx.objectStore(PRODUCTS).put(p));
     data.stock_transactions.forEach((t) => tx.objectStore(TRANSACTIONS).put(t));
+    // Older backups have no activity log: keep this phone's log rather than wiping it
+    if (Array.isArray(data.activity)) {
+      tx.objectStore(ACTIVITY).clear();
+      data.activity.forEach((a: any) => a && typeof a.id === 'string' && tx.objectStore(ACTIVITY).put(a));
+    }
     tx.objectStore(META).put(true, 'seeded');
   });
 }
@@ -158,6 +170,7 @@ export type LocalChange =
   | { kind: 'product'; product: Product }
   | { kind: 'product_delete'; id: string }
   | { kind: 'transaction'; transaction: StockTransaction }
+  | { kind: 'activity' }
   | { kind: 'reload' };
 
 const channel: BroadcastChannel | null =
