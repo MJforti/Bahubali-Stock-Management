@@ -1,5 +1,5 @@
-import React from 'react';
-import { Package, Search, User, ShieldCheck, Settings, HardDrive } from 'lucide-react';
+import React, { useState } from 'react';
+import { Package, Search, User, ShieldCheck, Settings, HardDrive, RefreshCw } from 'lucide-react';
 import { UserRole, RealtimeStatus } from '../../types/inventory';
 
 interface NavbarProps {
@@ -9,6 +9,7 @@ interface NavbarProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onOpenSettings: () => void;
+  onSync: () => Promise<void>;
   onQuickSearchClick: () => void;
 }
 
@@ -19,8 +20,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   searchQuery,
   onSearchChange,
   onOpenSettings,
+  onSync,
   onQuickSearchClick
 }) => {
+  const [syncing, setSyncing] = useState(false);
+  const [justSynced, setJustSynced] = useState(false);
+
+  const handleSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      await onSync();
+      setJustSynced(true);
+      setTimeout(() => setJustSynced(false), 1500);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-slate-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -83,6 +100,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="hidden xs:inline">Offline</span>
               </button>
             </div>
+
+            {/* Sync Button */}
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              title="Sync: reload the latest data"
+              className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs font-bold hover:text-amber-400 hover:border-slate-700 active:scale-95 transition-all disabled:opacity-60"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin text-amber-400' : justSynced ? 'text-emerald-400' : ''}`} />
+              <span className="hidden sm:inline">{syncing ? 'Syncing…' : justSynced ? 'Synced' : 'Sync'}</span>
+            </button>
 
             {/* Role Switcher */}
             <div className="relative flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">

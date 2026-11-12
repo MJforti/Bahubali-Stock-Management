@@ -64,7 +64,7 @@ export function App() {
 
       // 2. Fetch Transaction History in background without blocking initial render.
       // Keep any rows we already have (e.g. just-recorded ones) that the fetch didn't return.
-      fetchStockTransactions()
+      await fetchStockTransactions()
         .then((txs) =>
           setTransactions((prev) => {
             const merged = new Map<string, StockTransaction>();
@@ -259,6 +259,7 @@ export function App() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenSettings={() => setSettingsModalOpen(true)}
+        onSync={loadData}
         onQuickSearchClick={() => setActiveTab('products')}
       />
 
