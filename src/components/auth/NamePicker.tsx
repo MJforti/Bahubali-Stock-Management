@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { UserRound, Plus, X, Check, QrCode, ClipboardPaste, ArrowLeft, Copy, Share2 } from 'lucide-react';
 import {
+  addStaffName,
   cleanName,
-  decodeNames,
+  decodeShared,
+  describeImport,
   getStaffNames,
-  mergeStaffNames,
-  saveStaffNames,
-  shareLinkForNames
+  mergeRoster,
+  removeStaffName,
+  shareLink as buildShareLink
 } from '../../lib/staffNames';
 
 interface NamePickerProps {
@@ -16,10 +18,12 @@ interface NamePickerProps {
   canClose: boolean;
   onPick: (name: string) => void;
   onClose: () => void;
+  /** Called after names are removed (here or by an import), so the app can react if the current person was removed */
+  onListChanged: (names: string[]) => void;
 }
 
 /** "Who's using the app?" Every stock movement is recorded under the chosen name. */
-export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClose, onPick, onClose }) => {
+export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClose, onPick, onClose, onListChanged }) => {
   const [names, setNames] = useState<string[]>(() => getStaffNames());
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
@@ -29,8 +33,10 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
   const [copied, setCopied] = useState(false);
   const [pasted, setPasted] = useState('');
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [updateNote, setUpdateNote] = useState<string | null>(notice ?? null);
 
-  const link = names.length ? shareLinkForNames(names) : '';
+  // Shared even when the list is empty, so a removal of the last name can spread too
+  const link = view === 'share' ? buildShareLink() : '';
 
   useEffect(() => {
     if (view !== 'share' || !link) return;
@@ -59,17 +65,19 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
 
   const importPasted = (e: React.FormEvent) => {
     e.preventDefault();
-    const incoming = decodeNames(pasted);
+    const incoming = decodeShared(pasted);
     if (!incoming) {
       setImportMsg('That is not a name list code. Copy the whole link from the other phone');
       return;
     }
-    const added = mergeStaffNames(incoming);
-    setNames(getStaffNames());
+    const result = mergeRoster(incoming);
+    const next = getStaffNames();
+    setNames(next);
     setPasted('');
     setImportMsg(null);
     setView('list');
-    setError(added ? null : 'Those names are already on this phone');
+    setUpdateNote(describeImport(result));
+    onListChanged(next);
   };
 
   const addName = (e: React.FormEvent) => {
@@ -80,16 +88,16 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
       setError(`${name} is already on the list`);
       return;
     }
-    const next = [...names, name].sort((a, b) => a.localeCompare(b));
-    setNames(next);
-    saveStaffNames(next);
+    addStaffName(name);
+    setNames(getStaffNames());
     onPick(name);
   };
 
   const removeName = (name: string) => {
-    const next = names.filter((n) => n !== name);
+    removeStaffName(name);
+    const next = getStaffNames();
     setNames(next);
-    saveStaffNames(next);
+    onListChanged(next);
   };
 
   const showForm = names.length === 0 || draft !== '' || error !== null;
@@ -101,7 +109,7 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
           <div>
             <h2 className="text-lg font-medium text-slate-100">Who's using the app?</h2>
             <p className="mt-1 text-sm text-slate-500">Stock ins and stock outs are recorded under your name</p>
-            {notice && view === 'list' && <p className="mt-2 text-sm text-emerald-400">{notice}</p>}
+            {updateNote && view === 'list' && <p className="mt-2 text-sm text-emerald-400">{updateNote}</p>}
           </div>
           {canClose && (
             <button onClick={onClose} aria-label="Close" className="w-9 h-9 shrink-0 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors">
@@ -121,7 +129,8 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
             <div className="mx-auto w-56 h-56 rounded-xl bg-white p-2 flex items-center justify-center">
               {qr ? <img src={qr} alt="Name list QR code" className="w-full h-full" /> : <QrCode className="w-10 h-10 text-slate-400" />}
             </div>
-            <p className="text-center text-sm text-slate-500">{names.length} names: {names.join(', ')}</p>
+            <p className="text-center text-sm text-slate-500">{names.length ? `${names.length} names: ${names.join(', ')}` : 'No names. Sharing this clears the list on the other phone'}</p>
+            <p className="text-center text-xs text-slate-500">Names you removed on this phone get removed on the other phone too</p>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={copyLink} className="h-11 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-100 text-[15px] flex items-center justify-center gap-2 transition-colors">
                 {copied ? <Check className="w-4 h-4 text-emerald-400" strokeWidth={1.5} /> : <Copy className="w-4 h-4 text-slate-400" strokeWidth={1.5} />}
@@ -241,7 +250,6 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
           <div className="px-5 pb-5 -mt-1 grid grid-cols-2 gap-2 border-t border-slate-800 pt-4">
             <button
               onClick={() => setView('share')}
-              disabled={names.length === 0}
               className="h-10 rounded-lg text-sm text-slate-300 hover:bg-slate-850 flex items-center justify-center gap-2 transition-colors disabled:opacity-40"
             >
               <QrCode className="w-4 h-4 text-slate-500" strokeWidth={1.5} /> Share list

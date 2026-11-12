@@ -13,7 +13,7 @@ import { InventoryDataSheet } from './components/datasheet/InventoryDataSheet';
 import { ExcelImportModal } from './components/excel/ExcelImportModal';
 import { isUpdateReady, onUpdateReady, applyUpdate } from './pwa';
 import { NamePicker } from './components/auth/NamePicker';
-import { getCurrentStaff, setCurrentStaff, importNamesFromUrl } from './lib/staffNames';
+import { getCurrentStaff, setCurrentStaff, importFromUrl, describeImport, getStaffNames } from './lib/staffNames';
 import { BackupModal } from './components/settings/BackupModal';
 
 import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
@@ -30,8 +30,19 @@ export function App() {
   const [userRole, setUserRole] = useState<UserRole>('staff'); // STAFF VIEW BY DEFAULT
   const [currentStaff, setCurrentStaffState] = useState<string | null>(() => getCurrentStaff());
   // Opened from a shared name-list QR/link: add the names, then show the picker
-  const [sharedImport] = useState(() => importNamesFromUrl());
+  const [sharedImport] = useState(() => importFromUrl());
   const [namePickerOpen, setNamePickerOpen] = useState(() => sharedImport !== null);
+  // If this person was removed from the list, ask who is using the app again
+  const handleNamesChanged = (names: string[]) => {
+    if (currentStaff && !names.some((n) => n.toLowerCase() === currentStaff.toLowerCase())) {
+      setCurrentStaff(null);
+      setCurrentStaffState(null);
+    }
+  };
+  useEffect(() => {
+    if (sharedImport) handleNamesChanged(getStaffNames());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const pickStaff = (name: string) => {
     setCurrentStaff(name);
     setCurrentStaffState(name);
@@ -439,13 +450,8 @@ export function App() {
       {/* Who's using the app */}
       {(!currentStaff || namePickerOpen) && (
         <NamePicker
-          notice={
-            sharedImport
-              ? sharedImport.added
-                ? `Added ${sharedImport.added} ${sharedImport.added === 1 ? 'name' : 'names'} from the other phone`
-                : 'This phone already had every name on that list'
-              : null
-          }
+          notice={sharedImport ? describeImport(sharedImport) : null}
+          onListChanged={handleNamesChanged}
           current={currentStaff}
           canClose={!!currentStaff}
           onPick={pickStaff}
