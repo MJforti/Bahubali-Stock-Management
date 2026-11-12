@@ -157,7 +157,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             {[
               ['Rack', product.rack ? <span className="rack-tag">{product.rack}</span> : <span className="text-slate-500">Not set</span>],
               ['Selling price', <span className="text-slate-100">{formatPrice(product.selling_price)}</span>],
-              ...(userRole === 'admin' ? [['Cost price', <span className="text-slate-300">{formatPrice(product.purchase_price)}</span>]] : []),
+              ['Cost price', <span className="text-slate-300">{formatPrice(product.purchase_price)}</span>],
               ['Supplier', <span className="text-slate-300">{product.supplier || 'Not set'}</span>],
               ['SKU', <span className="font-mono text-xs text-slate-400">{product.sku}</span>],
               ['Last changed', <span className="text-slate-400">{new Date(product.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>]
