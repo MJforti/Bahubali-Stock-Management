@@ -1,6 +1,6 @@
 import { Product, RealtimeStatus } from '../types/inventory';
 import { diffProduct, logActivity } from '../lib/activity';
-import { PRODUCTS, getAll, withTransaction, assertSkuFree, newId, notifyOtherTabs } from '../lib/localDb';
+import { queueInTx, OUTBOX, PRODUCTS, getAll, withTransaction, assertSkuFree, newId, notifyOtherTabs } from '../lib/localDb';
 
 export function normalizeProduct(p: any): Product {
   return {
@@ -37,9 +37,10 @@ export async function createProduct(
   if (!product.name?.trim()) throw new Error('Product name is required.');
   if (!product.sku?.trim()) throw new Error('SKU is required.');
 
-  await withTransaction([PRODUCTS], async (tx) => {
+  await withTransaction([PRODUCTS, OUTBOX], async (tx) => {
     await assertSkuFree(tx, product.sku);
     tx.objectStore(PRODUCTS).put(product);
+    queueInTx(tx, { kind: 'product', id: product.id });
   });
 
   notifyOtherTabs({ kind: 'product', product });
@@ -57,7 +58,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   const { id: _id, created_at: _c, ...rest } = updates as any;
 
   let before: Product | undefined;
-  const updated = await withTransaction([PRODUCTS], async (tx, get) => {
+  const updated = await withTransaction([PRODUCTS, OUTBOX], async (tx, get) => {
     const existing = await get<Product>(PRODUCTS, id);
     before = existing;
     if (!existing) throw new Error('Product not found.');
@@ -65,6 +66,7 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
     const next = normalizeProduct({ ...existing, ...rest, id, updated_at: now, details_updated_at: now });
     if (rest.sku && rest.sku !== existing.sku) await assertSkuFree(tx, rest.sku, id);
     tx.objectStore(PRODUCTS).put(next);
+    queueInTx(tx, { kind: 'product', id });
     return next;
   });
 

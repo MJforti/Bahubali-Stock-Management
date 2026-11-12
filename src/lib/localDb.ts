@@ -1,19 +1,21 @@
 /**
- * Offline database for Bahubali Enterprises.
+ * Local database for Bahubali Enterprises (IndexedDB).
  *
- * All products and stock history live in the browser's IndexedDB on this
- * device. Nothing is sent over the network. Other open tabs/windows of the
- * app on the same device are kept in sync through BroadcastChannel.
+ * The app always reads and writes this local copy, so it works with no
+ * internet. Every change is also queued in the outbox and sent to the
+ * central Supabase database by lib/sync.ts whenever the phone is online.
+ * Other open tabs on the same device are kept in sync with BroadcastChannel.
  */
 import { Product, StockTransaction } from '../types/inventory';
 import { INITIAL_PRODUCTS } from '../data/seedData';
 
 const DB_NAME = 'bahubali_inventory';
-const DB_VERSION = 2; // 2: activity log
+const DB_VERSION = 3; // 2: activity log, 3: outbox for cloud sync
 export const PRODUCTS = 'products';
 export const TRANSACTIONS = 'stock_transactions';
 export const ACTIVITY = 'activity';
-const META = 'meta';
+export const OUTBOX = 'outbox';
+export const META = 'meta';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -52,6 +54,9 @@ export function openDb(): Promise<IDBDatabase> {
           s.createIndex('created_at', 'created_at');
         }
         if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
+        if (!db.objectStoreNames.contains(OUTBOX)) {
+          db.createObjectStore(OUTBOX, { keyPath: 'seq', autoIncrement: true });
+        }
         if (!db.objectStoreNames.contains(ACTIVITY)) {
           const s = db.createObjectStore(ACTIVITY, { keyPath: 'id' });
           s.createIndex('created_at', 'created_at');
@@ -82,7 +87,11 @@ async function seedIfNeeded(db: IDBDatabase) {
 
 export function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
-  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+  // Older browsers: build a random version-4 UUID by hand
+  const h = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));
+  h[12] = '4';
+  h[16] = ((parseInt(h[16], 16) & 3) | 8).toString(16);
+  return `${h.slice(0, 8).join('')}-${h.slice(8, 12).join('')}-${h.slice(12, 16).join('')}-${h.slice(16, 20).join('')}-${h.slice(20).join('')}`;
 }
 
 export async function getAll<T>(store: string): Promise<T[]> {
@@ -192,4 +201,44 @@ export function onOtherTabChange(cb: (change: LocalChange) => void): () => void 
 export async function verifyAdminPasscode(inputCode: string): Promise<boolean> {
   const code = inputCode.trim();
   return code === '9988' || code === '1234';
+}
+
+// ---------- Outbox: changes waiting to be sent to the central database ----------
+
+export type OutboxOp =
+  | { kind: 'product'; id: string }
+  | { kind: 'movement'; id: string }
+  | { kind: 'activity'; id: string }
+  | { kind: 'staff'; name: string };
+
+/** Queue a change inside an existing write transaction (so it can't be lost). */
+export function queueInTx(tx: IDBTransaction, op: OutboxOp) {
+  tx.objectStore(OUTBOX).add({ ...op, queued_at: Date.now() });
+  pendingHook();
+}
+
+/** Queue changes in their own transaction. */
+export async function queue(ops: OutboxOp[]) {
+  if (!ops.length) return;
+  await withTransaction([OUTBOX], async (tx) => {
+    ops.forEach((op) => tx.objectStore(OUTBOX).add({ ...op, queued_at: Date.now() }));
+  });
+  pendingHook();
+}
+
+let pendingHook: () => void = () => {};
+/** lib/sync.ts registers here to send queued changes soon after they're made. */
+export function onQueued(fn: () => void) {
+  pendingHook = fn;
+}
+
+export async function getMeta<T>(key: string): Promise<T | undefined> {
+  const db = await openDb();
+  return req(db.transaction(META).objectStore(META).get(key)) as Promise<T | undefined>;
+}
+
+export async function setMeta(key: string, value: unknown) {
+  await withTransaction([META], async (tx) => {
+    tx.objectStore(META).put(value, key);
+  });
 }

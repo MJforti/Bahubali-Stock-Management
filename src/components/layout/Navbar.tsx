@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Package, Search, Lock, LockOpen, ArrowLeftRight, RefreshCw, Check } from 'lucide-react';
+import { Package, Search, Lock, LockOpen, HardDrive, RefreshCw, Check } from 'lucide-react';
 import { InstallButton } from './InstallButton';
+import { SyncStatus } from '../../lib/sync';
 import { UserRole, RealtimeStatus } from '../../types/inventory';
 
 interface NavbarProps {
@@ -14,6 +15,7 @@ interface NavbarProps {
   onQuickSearchClick: () => void;
   currentStaff: string | null;
   onOpenNamePicker: () => void;
+  syncStatus: SyncStatus;
 }
 
 const iconBtn =
@@ -28,7 +30,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSync,
   onQuickSearchClick,
   currentStaff,
-  onOpenNamePicker
+  onOpenNamePicker,
+  syncStatus
 }) => {
   const [syncing, setSyncing] = useState(false);
   const [justSynced, setJustSynced] = useState(false);
@@ -77,18 +80,44 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="ml-auto flex items-center gap-2">
           <InstallButton />
 
-          <button onClick={handleSync} disabled={syncing} title="Reload the latest data" className={iconBtn}>
-            {justSynced ? (
-              <Check className="w-4 h-4 text-emerald-400" strokeWidth={1.5} />
-            ) : (
-              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} strokeWidth={1.5} />
-            )}
-            <span className="hidden sm:inline">{syncing ? 'Syncing' : justSynced ? 'Synced' : 'Sync'}</span>
-          </button>
+          {(() => {
+            const busy = syncing || syncStatus.state === 'syncing';
+            const waiting = syncStatus.pending;
+            const label = busy
+              ? 'Syncing'
+              : syncStatus.state === 'offline'
+              ? waiting ? `Offline · ${waiting} waiting` : 'Offline'
+              : syncStatus.state === 'error'
+              ? 'Sync problem'
+              : justSynced || syncStatus.lastSyncedAt ? 'Synced' : 'Sync';
+            const dot =
+              syncStatus.state === 'offline' ? 'bg-slate-500' : syncStatus.state === 'error' ? 'bg-rose-400' : waiting ? 'bg-amber-400' : 'bg-emerald-400';
+            const title =
+              syncStatus.state === 'offline'
+                ? `No internet. ${waiting ? `${waiting} changes are saved on this phone and will be sent automatically.` : 'Changes are saved on this phone.'}`
+                : syncStatus.state === 'error'
+                ? `Could not sync: ${syncStatus.error}. Tap to try again.`
+                : syncStatus.live
+                ? 'Live: changes from other phones appear automatically. Tap to sync now.'
+                : 'Tap to sync now';
+            return (
+              <button onClick={handleSync} disabled={syncing} title={title} aria-label={`${label}. ${title}`} className={iconBtn}>
+                <span className="relative">
+                  {justSynced ? (
+                    <Check className="w-4 h-4 text-emerald-400" strokeWidth={1.5} />
+                  ) : (
+                    <RefreshCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} strokeWidth={1.5} />
+                  )}
+                  <span className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${dot}`} />
+                </span>
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            );
+          })()}
 
-          <button onClick={onOpenSettings} title="Share stock with another phone, or back up" className={iconBtn}>
-            <ArrowLeftRight className="w-4 h-4" strokeWidth={1.5} />
-            <span className="hidden lg:inline">Share</span>
+          <button onClick={onOpenSettings} title="Backup" className={iconBtn}>
+            <HardDrive className="w-4 h-4" strokeWidth={1.5} />
+            <span className="hidden lg:inline">Backup</span>
           </button>
 
           <button onClick={onOpenNamePicker} title="Change who is using the app" className={`${iconBtn} max-w-[9rem]`}>

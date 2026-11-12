@@ -1,5 +1,5 @@
 import { StockTransaction, TransactionType, Product } from '../types/inventory';
-import { PRODUCTS, TRANSACTIONS, getAll, withTransaction, newId, notifyOtherTabs } from '../lib/localDb';
+import { OUTBOX, queueInTx, PRODUCTS, TRANSACTIONS, getAll, withTransaction, newId, notifyOtherTabs } from '../lib/localDb';
 import { normalizeProduct } from './productService';
 
 function withProductInfo(t: StockTransaction, prod?: Product): StockTransaction {
@@ -49,7 +49,7 @@ export async function recordStockMovement(params: {
 
   const finalReason = (reason || '').trim();
 
-  const result = await withTransaction([PRODUCTS, TRANSACTIONS], async (tx, get) => {
+  const result = await withTransaction([PRODUCTS, TRANSACTIONS, OUTBOX], async (tx, get) => {
     const stored = await get<Product>(PRODUCTS, params.product.id);
     if (!stored) throw new Error('Product not found.');
     const product = normalizeProduct(stored);
@@ -88,6 +88,7 @@ export async function recordStockMovement(params: {
 
     tx.objectStore(PRODUCTS).put(updated);
     tx.objectStore(TRANSACTIONS).put(transaction);
+    queueInTx(tx, { kind: 'movement', id: transaction.id });
     return { product: updated, transaction: withProductInfo(transaction, updated) };
   });
 

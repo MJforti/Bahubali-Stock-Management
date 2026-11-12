@@ -13,7 +13,7 @@ import { InventoryDataSheet } from './components/datasheet/InventoryDataSheet';
 import { ExcelImportModal } from './components/excel/ExcelImportModal';
 import { isUpdateReady, onUpdateReady, applyUpdate } from './pwa';
 import { NamePicker } from './components/auth/NamePicker';
-import { getCurrentStaff, setCurrentStaff, importFromUrl, describeImport, getStaffNames } from './lib/staffNames';
+import { getCurrentStaff, setCurrentStaff, getRoster, STAFF_CHANGED_EVENT } from './lib/staffNames';
 import { setActor, logActivity, fetchActivity, ActivityEntry } from './lib/activity';
 import { BackupModal } from './components/settings/BackupModal';
 
@@ -22,6 +22,7 @@ import { fetchProducts, createProduct, updateProduct, normalizeProduct } from '.
 import { fetchStockTransactions, recordStockMovement } from './services/stockService';
 import { exportInventoryToExcel } from './services/excelService';
 import { setupRealtimeSync } from './services/realtimeSync';
+import { startSync, syncNow, onSyncStatus, SyncStatus } from './lib/sync';
 
 import { SplashScreen } from './components/layout/SplashScreen';
 import { AdminPasscodeModal } from './components/auth/AdminPasscodeModal';
@@ -30,20 +31,21 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [userRole, setUserRole] = useState<UserRole>('staff'); // STAFF VIEW BY DEFAULT
   const [currentStaff, setCurrentStaffState] = useState<string | null>(() => getCurrentStaff());
-  // Opened from a shared name-list QR/link: add the names, then show the picker
-  const [sharedImport] = useState(() => importFromUrl());
-  const [namePickerOpen, setNamePickerOpen] = useState(() => sharedImport !== null);
-  // If this person was removed from the list, ask who is using the app again
-  const handleNamesChanged = (names: string[]) => {
-    if (currentStaff && !names.some((n) => n.toLowerCase() === currentStaff.toLowerCase())) {
+  const [namePickerOpen, setNamePickerOpen] = useState(false);
+  // If this person was removed from the staff list (here or on another phone), ask who is using the app again
+  const handleNamesChanged = useCallback(() => {
+    const me = getCurrentStaff();
+    if (!me) return;
+    const removed = getRoster().some((e) => e.n.toLowerCase() === me.toLowerCase() && e.r);
+    if (removed) {
       setCurrentStaff(null);
       setCurrentStaffState(null);
     }
-  };
-  useEffect(() => {
-    if (sharedImport) handleNamesChanged(getStaffNames());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {
+    window.addEventListener(STAFF_CHANGED_EVENT, handleNamesChanged);
+    return () => window.removeEventListener(STAFF_CHANGED_EVENT, handleNamesChanged);
+  }, [handleNamesChanged]);
   const pickStaff = (name: string) => {
     if (name !== currentStaff) {
       // A different person must enter the admin code themselves
@@ -156,8 +158,25 @@ export function App() {
       }
     });
 
-    return unsubscribe;
+    // Central database: send this phone's changes, receive everyone else's (live)
+    const stopSync = startSync(() => {
+      loadData();
+      window.dispatchEvent(new CustomEvent('bahubali-activity'));
+    });
+
+    return () => {
+      unsubscribe();
+      stopSync();
+    };
   }, [loadData]);
+
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: 'idle', pending: 0, live: false, lastSyncedAt: null, error: null });
+  useEffect(() => {
+    const off = onSyncStatus(setSyncStatus);
+    return () => {
+      off();
+    };
+  }, []);
 
   // Keep detail modal updated with latest stock
   useEffect(() => {
@@ -336,7 +355,11 @@ export function App() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenSettings={() => setSettingsModalOpen(true)}
-        onSync={loadData}
+        onSync={async () => {
+          await syncNow();
+          await loadData();
+        }}
+        syncStatus={syncStatus}
         currentStaff={currentStaff}
         onOpenNamePicker={() => setNamePickerOpen(true)}
         onQuickSearchClick={() => setActiveTab('products')}
@@ -501,7 +524,6 @@ export function App() {
       {/* Who's using the app */}
       {(!currentStaff || namePickerOpen) && (
         <NamePicker
-          notice={sharedImport ? describeImport(sharedImport) : null}
           onListChanged={handleNamesChanged}
           current={currentStaff}
           canClose={!!currentStaff}
@@ -514,7 +536,7 @@ export function App() {
       {settingsModalOpen && (
         <BackupModal
           isAdmin={userRole === 'admin'}
-          staffName={currentStaff}
+          syncStatus={syncStatus}
           onClose={() => setSettingsModalOpen(false)}
           onRestored={() => loadData()}
         />

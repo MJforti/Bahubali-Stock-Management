@@ -1,24 +1,12 @@
 /**
- * Sharing stock data between phones, offline.
- *
- * One phone saves a sync file (products, stock movements and the staff
- * list) and sends it any way it likes: WhatsApp, Bluetooth, Nearby Share.
- * The other phone opens it and the two are merged, never overwritten:
- *
- *  - Stock movements are a log with unique ids, so merging is a union.
- *    Movements made on both phones are all kept.
- *  - Stock levels are then recalculated for every product by replaying its
- *    movements in time order from its opening stock. Two phones that each
- *    sold units end up with both sales subtracted. A count correction
- *    sets the stock to the counted number at that moment.
- *  - Product details (name, price, rack, photo, active) follow the most
- *    recent edit, by `details_updated_at`.
- *  - The staff list merges like the name-list QR code (newest change wins).
+ * Snapshot of everything on this phone, used for the first upload to the
+ * central database (lib/sync.ts). It pins each product's opening stock from
+ * its movement history, so the central database replays stock the same way.
  */
 import { Product, StockTransaction } from '../types/inventory';
-import { PRODUCTS, TRANSACTIONS, withTransaction, notifyOtherTabs } from './localDb';
-import { RosterEntry, getRoster, mergeRoster } from './staffNames';
-import { ActivityEntry, fetchActivity, mergeActivity } from './activity';
+import { PRODUCTS, TRANSACTIONS, withTransaction } from './localDb';
+import { RosterEntry, getRoster } from './staffNames';
+import { ActivityEntry, fetchActivity } from './activity';
 
 export interface SyncFile {
   app: 'bahubali-stock-management';
@@ -32,16 +20,6 @@ export interface SyncFile {
   activity?: ActivityEntry[];
 }
 
-export interface SyncResult {
-  newProducts: number;
-  updatedProducts: number;
-  newMovements: number;
-  stockChanged: number;
-  negative: string[];
-  namesAdded: string[];
-  namesRemoved: string[];
-  newActivity: number;
-}
 
 const time = (iso?: string) => (iso ? new Date(iso).getTime() || 0 : 0);
 
@@ -100,121 +78,6 @@ export async function buildSyncFile(from: string | null): Promise<SyncFile> {
     } as SyncFile;
   });
   return file;
-}
-
-export function isSyncFile(x: any): x is SyncFile {
-  return (
-    x &&
-    x.app === 'bahubali-stock-management' &&
-    x.kind === 'sync' &&
-    Array.isArray(x.products) &&
-    Array.isArray(x.stock_transactions)
-  );
-}
-
-/** Merges another phone's sync file into this phone. */
-export async function mergeSyncFile(file: SyncFile): Promise<SyncResult> {
-  if (!isSyncFile(file)) throw new Error('This is not a stock file from the Bahubali app.');
-
-  const result: SyncResult = {
-    newProducts: 0,
-    updatedProducts: 0,
-    newMovements: 0,
-    stockChanged: 0,
-    negative: [],
-    namesAdded: [],
-    namesRemoved: [],
-    newActivity: 0
-  };
-
-  await withTransaction([PRODUCTS, TRANSACTIONS], async (tx) => {
-    const localProducts = (await reqAll<Product>(tx.objectStore(PRODUCTS))) as Product[];
-    const localTxs = (await reqAll<StockTransaction>(tx.objectStore(TRANSACTIONS))) as StockTransaction[];
-    const localByProduct = groupBy(localTxs);
-    const localIds = new Set(localTxs.map((t) => t.id));
-
-    // 1. Product details: newest edit wins; opening stock pinned from whichever side has it
-    const products = new Map<string, Product>();
-    const before = new Map<string, number>();
-    for (const p of localProducts) {
-      before.set(p.id, Number(p.current_stock) || 0);
-      products.set(p.id, { ...p, opening_stock: deriveOpening(p, localByProduct.get(p.id) || []) });
-    }
-    for (const incoming of file.products) {
-      if (!incoming || typeof incoming.id !== 'string') continue;
-      const mine = products.get(incoming.id);
-      if (!mine) {
-        products.set(incoming.id, {
-          ...incoming,
-          opening_stock: typeof incoming.opening_stock === 'number' ? incoming.opening_stock : Number(incoming.current_stock) || 0
-        });
-        result.newProducts++;
-        continue;
-      }
-      if (time(incoming.details_updated_at) > time(mine.details_updated_at)) {
-        const { current_stock: _s, opening_stock: _o, ...details } = incoming;
-        products.set(incoming.id, { ...mine, ...details });
-        result.updatedProducts++;
-      }
-    }
-
-    // 2. Movements: union by id
-    const txs = new Map<string, StockTransaction>(localTxs.map((t) => [t.id, t]));
-    for (const t of file.stock_transactions) {
-      if (!t || typeof t.id !== 'string' || txs.has(t.id)) continue;
-      txs.set(t.id, stripDisplayFields(t));
-      result.newMovements++;
-    }
-
-    // 3. Replay each product's movements from its opening stock
-    const merged = groupBy(Array.from(txs.values()));
-    for (const [id, p] of products) {
-      let running = Number(p.opening_stock) || 0;
-      const list = (merged.get(id) || []).sort(byTime);
-      for (const t of list) {
-        const prev = running;
-        running = apply(running, t);
-        const fixed: StockTransaction = {
-          ...t,
-          previous_stock: prev,
-          new_stock: running,
-          quantity: t.type === 'ADJUSTMENT' ? Math.abs(running - prev) : Number(t.quantity) || 0
-        };
-        if (fixed.previous_stock !== t.previous_stock || fixed.new_stock !== t.new_stock || fixed.quantity !== t.quantity || !localIds.has(t.id)) {
-          tx.objectStore(TRANSACTIONS).put(fixed);
-        }
-      }
-      const updated: Product = { ...p, current_stock: running };
-      if (before.has(id) && before.get(id) !== running) result.stockChanged++;
-      if (running < 0) result.negative.push(p.name);
-      tx.objectStore(PRODUCTS).put(updated);
-    }
-  });
-
-  if (Array.isArray(file.staff_roster)) {
-    const names = mergeRoster(file.staff_roster);
-    result.namesAdded = names.added;
-    result.namesRemoved = names.removed;
-  }
-
-  result.newActivity = await mergeActivity(file.activity);
-
-  notifyOtherTabs({ kind: 'reload' });
-  return result;
-}
-
-export function describeSync(r: SyncResult): string[] {
-  const lines: string[] = [];
-  const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
-  if (r.newMovements) lines.push(`${n(r.newMovements, 'new movement', 'new movements')} added to history`);
-  if (r.stockChanged) lines.push(`Stock updated for ${n(r.stockChanged, 'product', 'products')}`);
-  if (r.newProducts) lines.push(`${n(r.newProducts, 'new product', 'new products')}`);
-  if (r.updatedProducts) lines.push(`Details updated for ${n(r.updatedProducts, 'product', 'products')}`);
-  if (r.namesAdded.length) lines.push(`Added ${r.namesAdded.join(', ')} to the staff list`);
-  if (r.namesRemoved.length) lines.push(`Removed ${r.namesRemoved.join(', ')} from the staff list`);
-  if (r.newActivity) lines.push(`${n(r.newActivity, 'new history entry', 'new history entries')}`);
-  if (!lines.length) lines.push('This phone was already up to date');
-  return lines;
 }
 
 // ---------- helpers ----------

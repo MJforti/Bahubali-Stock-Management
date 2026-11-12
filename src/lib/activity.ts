@@ -3,7 +3,7 @@
  * own history). Kept on the phone and shared with other phones in the
  * stock file, merged by id so nothing is lost or doubled.
  */
-import { ACTIVITY, getAll, newId, notifyOtherTabs, withTransaction } from './localDb';
+import { ACTIVITY, OUTBOX, getAll, newId, notifyOtherTabs, queueInTx, withTransaction } from './localDb';
 import { Product } from '../types/inventory';
 
 export type ActivityCategory = 'product' | 'people' | 'data';
@@ -74,8 +74,9 @@ export async function logActivity(
     ...extra
   };
   try {
-    await withTransaction([ACTIVITY], async (tx) => {
+    await withTransaction([ACTIVITY, OUTBOX], async (tx) => {
       tx.objectStore(ACTIVITY).put(entry);
+      queueInTx(tx, { kind: 'activity', id: entry.id });
     });
     notifyOtherTabs({ kind: 'activity' });
     window.dispatchEvent(new CustomEvent('bahubali-activity'));
