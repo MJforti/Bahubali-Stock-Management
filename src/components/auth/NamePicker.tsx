@@ -9,7 +9,8 @@ import {
   getStaffNames,
   mergeRoster,
   removeStaffName,
-  shareLink as buildShareLink
+  shareLink as buildShareLink,
+  encodeRoster
 } from '../../lib/staffNames';
 
 interface NamePickerProps {
@@ -37,6 +38,18 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
 
   // Shared even when the list is empty, so a removal of the last name can spread too
   const link = view === 'share' ? buildShareLink() : '';
+  const code = view === 'share' ? encodeRoster() : '';
+  const [codeCopied, setCodeCopied] = useState(false);
+
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 1500);
+    } catch {
+      setCodeCopied(false);
+    }
+  };
 
   useEffect(() => {
     if (view !== 'share' || !link) return;
@@ -124,8 +137,23 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
               <ArrowLeft className="w-4 h-4" strokeWidth={1.5} /> Back
             </button>
             <p className="text-sm text-slate-400">
-              Scan this with the other phone's camera. If the app is installed on that phone's home screen, send the link instead and paste it under Get from another phone
+              On the other phone, open Get from another phone and enter this code, or scan the QR code with its camera
             </p>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm text-slate-400">Code</span>
+                <button onClick={copyCode} className="h-8 px-2 -mr-2 rounded-lg text-sm text-slate-300 hover:bg-slate-850 flex items-center gap-1.5 transition-colors">
+                  {codeCopied ? <Check className="w-4 h-4 text-emerald-400" strokeWidth={1.5} /> : <Copy className="w-4 h-4 text-slate-500" strokeWidth={1.5} />}
+                  {codeCopied ? 'Copied' : 'Copy code'}
+                </button>
+              </div>
+              <p
+                onClick={(e) => window.getSelection()?.selectAllChildren(e.currentTarget)}
+                className="max-h-24 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 font-mono text-sm text-slate-100 break-all select-all"
+              >
+                {code}
+              </p>
+            </div>
             <div className="mx-auto w-56 h-56 rounded-xl bg-white p-2 flex items-center justify-center">
               {qr ? <img src={qr} alt="Name list QR code" className="w-full h-full" /> : <QrCode className="w-10 h-10 text-slate-400" />}
             </div>
@@ -151,7 +179,7 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
               <ArrowLeft className="w-4 h-4" strokeWidth={1.5} /> Back
             </button>
             <p className="text-sm text-slate-400">
-              On a phone that has the list, open the name picker, choose Share list and copy the link. Paste it here
+              On a phone that has the list, open the name picker and choose Share list. Paste the code shown there
             </p>
             <textarea
               value={pasted}
@@ -161,7 +189,7 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
               }}
               rows={3}
               autoFocus
-              placeholder="Paste link or code"
+              placeholder="Paste code or link"
               className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-600 resize-none"
             />
             {importMsg && <p className="text-sm text-rose-400">{importMsg}</p>}
