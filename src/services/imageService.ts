@@ -20,37 +20,22 @@ export async function compressProductImage(file: File): Promise<File> {
 export async function uploadProductImage(file: File, sku: string): Promise<string> {
   const compressedFile = await compressProductImage(file);
 
-  // If Supabase is connected, upload to Supabase Storage bucket
-  if (supabase) {
-    try {
-      const fileExt = compressedFile.name.split('.').pop() || 'jpg';
-      const fileName = `${sku.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${fileExt}`;
-      const filePath = `products/${fileName}`;
+  const fileExt = compressedFile.name.split('.').pop() || 'jpg';
+  const fileName = `${sku.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${fileExt}`;
+  const filePath = `products/${fileName}`;
 
-      const { data, error } = await supabase.storage
-        .from('product-images')
-        .upload(filePath, compressedFile, { upsert: true });
+  const { error } = await supabase.storage
+    .from('product-images')
+    .upload(filePath, compressedFile, { upsert: true, contentType: compressedFile.type || 'image/jpeg' });
 
-      if (error) {
-        console.error('Supabase upload error:', error);
-        throw error;
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath);
-
-      return publicUrlData.publicUrl;
-    } catch (err) {
-      console.warn('Falling back to local data URL image storage:', err);
-    }
+  if (error) {
+    console.error('Supabase upload error:', error);
+    throw new Error(`Photo upload failed: ${error.message}`);
   }
 
-  // Fallback: Convert to Base64 Data URL for local storage
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (err) => reject(err);
-    reader.readAsDataURL(compressedFile);
-  });
+  const { data: publicUrlData } = supabase.storage
+    .from('product-images')
+    .getPublicUrl(filePath);
+
+  return publicUrlData.publicUrl;
 }

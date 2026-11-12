@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   email TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'staff')),
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 7. ADMIN PASSCODE VERIFICATION RPC FUNCTION
 CREATE OR REPLACE FUNCTION verify_admin_code(input_code TEXT)
 RETURNS BOOLEAN
@@ -94,7 +96,9 @@ BEGIN
 END;
 $$;
 
--- 7B. ATOMIC STOCK MOVEMENT RPC FUNCTION FOR SECURE DIRECT DB WRITES
+-- 7B. ATOMIC STOCK MOVEMENT RPC FUNCTION
+-- Locks the product row, validates the movement, updates stock and writes the
+-- history row in one transaction. Returns { product, transaction }.
 CREATE OR REPLACE FUNCTION record_stock_change(
   p_product_id UUID,
   p_type TEXT,
@@ -106,44 +110,68 @@ CREATE OR REPLACE FUNCTION record_stock_change(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_old_stock NUMERIC;
   v_new_stock NUMERIC;
+  v_tx_qty NUMERIC;
+  v_type TEXT := UPPER(TRIM(p_type));
   v_product products%ROWTYPE;
+  v_tx stock_transactions%ROWTYPE;
 BEGIN
+  IF v_type NOT IN ('IN', 'OUT', 'ADJUSTMENT') THEN
+    RAISE EXCEPTION 'Invalid stock movement type: %', p_type;
+  END IF;
+
+  IF p_quantity IS NULL OR p_quantity < 0 OR (v_type <> 'ADJUSTMENT' AND p_quantity = 0) THEN
+    RAISE EXCEPTION 'Quantity must be greater than zero.';
+  END IF;
+
+  IF v_type = 'ADJUSTMENT' AND COALESCE(TRIM(p_reason), '') = '' THEN
+    RAISE EXCEPTION 'A reason is required for stock adjustments.';
+  END IF;
+
   SELECT * INTO v_product FROM products WHERE id = p_product_id FOR UPDATE;
-  
+
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Product not found';
   END IF;
 
   v_old_stock := v_product.current_stock;
 
-  IF p_type = 'IN' THEN
+  IF v_type = 'IN' THEN
     v_new_stock := v_old_stock + p_quantity;
-  ELSIF p_type = 'OUT' THEN
+    v_tx_qty := p_quantity;
+  ELSIF v_type = 'OUT' THEN
+    IF p_quantity > v_old_stock THEN
+      RAISE EXCEPTION 'Cannot issue % %(s). Current stock is only %.', p_quantity, v_product.unit, v_old_stock;
+    END IF;
     v_new_stock := v_old_stock - p_quantity;
-  ELSIF p_type = 'ADJUSTMENT' THEN
-    v_new_stock := p_quantity;
+    v_tx_qty := p_quantity;
   ELSE
-    v_new_stock := v_old_stock;
+    v_new_stock := p_quantity;
+    v_tx_qty := ABS(p_quantity - v_old_stock);
   END IF;
 
-  UPDATE products 
-  SET current_stock = v_new_stock, updated_at = NOW()
+  UPDATE products
+  SET current_stock = v_new_stock, updated_at = NOW(), updated_by = p_user_name
   WHERE id = p_product_id
   RETURNING * INTO v_product;
 
   INSERT INTO stock_transactions (
     product_id, type, quantity, previous_stock, new_stock, reason, reference, user_name
   ) VALUES (
-    p_product_id, p_type, p_quantity, v_old_stock, v_new_stock, p_reason, p_reference, p_user_name
-  );
+    p_product_id, v_type, v_tx_qty, v_old_stock, v_new_stock, COALESCE(p_reason, ''), COALESCE(p_reference, ''), COALESCE(p_user_name, 'Staff')
+  )
+  RETURNING * INTO v_tx;
 
-  RETURN to_jsonb(v_product);
+  RETURN jsonb_build_object('product', to_jsonb(v_product), 'transaction', to_jsonb(v_tx));
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION record_stock_change(UUID, TEXT, NUMERIC, TEXT, TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION verify_admin_code(TEXT) TO anon, authenticated;
 
 -- INDEXES FOR FAST SEARCH AND REAL-TIME AGGREGATIONS
 CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
@@ -159,8 +187,19 @@ CREATE INDEX IF NOT EXISTS idx_transactions_created ON stock_transactions(create
 ALTER TABLE products REPLICA IDENTITY FULL;
 ALTER TABLE stock_transactions REPLICA IDENTITY FULL;
 
-ALTER PUBLICATION supabase_realtime ADD TABLE products;
-ALTER PUBLICATION supabase_realtime ADD TABLE stock_transactions;
+-- (idempotent: safe to re-run this script)
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['products', 'stock_transactions'] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = t
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', t);
+    END IF;
+  END LOOP;
+END $$;
 
 -- RLS POLICIES (ENABLE FULL ANONYMOUS / PUBLIC ACCESS FOR DEMO AND PRODUCTION)
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
@@ -169,6 +208,27 @@ ALTER TABLE brands ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- With RLS enabled and no policies, the anon key can neither read nor write,
+-- so the app showed no products and every save failed. The app currently uses
+-- a passcode (not Supabase Auth), so access is granted to the anon role.
+DROP POLICY IF EXISTS "Public products access" ON products;
+CREATE POLICY "Public products access" ON products FOR ALL USING (true) WITH CHECK (true);
+
+-- History is append-only from the client: read + insert, no update/delete.
+DROP POLICY IF EXISTS "Public transactions read" ON stock_transactions;
+CREATE POLICY "Public transactions read" ON stock_transactions FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public transactions insert" ON stock_transactions;
+CREATE POLICY "Public transactions insert" ON stock_transactions FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public brands access" ON brands;
+CREATE POLICY "Public brands access" ON brands FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Public categories access" ON categories;
+CREATE POLICY "Public categories access" ON categories FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Public suppliers access" ON suppliers;
+CREATE POLICY "Public suppliers access" ON suppliers FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Public profiles read" ON profiles;
+CREATE POLICY "Public profiles read" ON profiles FOR SELECT USING (true);
 
 -- 8. PRODUCT DRAFTS TABLE (UNPUBLISHED ADMIN MODIFICATIONS)
 CREATE TABLE IF NOT EXISTS product_drafts (
@@ -302,22 +362,35 @@ $$;
 ALTER TABLE product_drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory_versions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Public drafts access" ON product_drafts;
 CREATE POLICY "Public drafts access" ON product_drafts FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Public versions access" ON inventory_versions;
 CREATE POLICY "Public versions access" ON inventory_versions FOR ALL USING (true) WITH CHECK (true);
 
-ALTER PUBLICATION supabase_realtime ADD TABLE inventory_versions;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'inventory_versions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.inventory_versions;
+  END IF;
+END $$;
 
 -- STORAGE BUCKET CREATION FOR PRODUCT PHOTOS
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('product-images', 'product-images', true)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
+DROP POLICY IF EXISTS "Public access to product images" ON storage.objects;
 CREATE POLICY "Public access to product images" ON storage.objects 
 FOR SELECT USING (bucket_id = 'product-images');
 
+DROP POLICY IF EXISTS "Upload product images policy" ON storage.objects;
 CREATE POLICY "Upload product images policy" ON storage.objects 
 FOR INSERT WITH CHECK (bucket_id = 'product-images');
 
+DROP POLICY IF EXISTS "Update product images policy" ON storage.objects;
 CREATE POLICY "Update product images policy" ON storage.objects 
 FOR UPDATE USING (bucket_id = 'product-images');
 
@@ -335,4 +408,4 @@ INSERT INTO products (id, name, brand, category, sub_category, sku, description,
 ('b1000000-0000-0000-0000-000000000010', 'PVC 90 Degree Elbow 2 inch', 'Supreme', 'Plumbing', 'Fittings', 'PLM-SUP-ELB-2IN', 'Durable pressure-tested PVC elbow connector', 'Piece', 0, 10, 20, 18.00, 32.00, 'Supreme Plastics', 'PL-02'),
 ('b1000000-0000-0000-0000-000000000011', 'Makita 4-inch Angle Grinder 850W', 'Makita', 'Power Tools', 'Grinders', 'PWR-MAK-GRN-4', 'Heavy duty industrial angle grinder with guard', 'Piece', 4, 2, 3, 2400.00, 3250.00, 'Makita Industrial Tools', 'PT-01'),
 ('b1000000-0000-0000-0000-000000000012', 'Fevicol SH Synthetic Resin Adhesive 1kg', 'Fevicol', 'Adhesives & Chemicals', 'Adhesives', 'CHM-FEV-1KG', 'Strong bonding wood glue for furniture and carpentry', 'Kg', 15, 5, 10, 210.00, 290.00, 'Pidilite Wholesale', 'C-01')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { BottomNav, ActiveTab } from './components/layout/BottomNav';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -13,7 +13,7 @@ import { ExcelImportModal } from './components/excel/ExcelImportModal';
 import { SupabaseConfigModal } from './components/settings/SupabaseConfigModal';
 
 import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
-import { fetchProducts, createProduct, updateProduct } from './services/productService';
+import { fetchProducts, createProduct, updateProduct, normalizeProduct } from './services/productService';
 import { fetchStockTransactions, recordStockMovement } from './services/stockService';
 import { exportInventoryToExcel } from './services/excelService';
 import { setupRealtimeSync } from './services/realtimeSync';
@@ -34,6 +34,9 @@ export function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const productsRef = useRef<Product[]>([]);
+  productsRef.current = products;
 
   // Modal States
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
@@ -56,13 +59,29 @@ export function App() {
       // 1. Fetch Products for instant UI render
       const prodRes = await fetchProducts();
       setProducts(prodRes.products);
-      setRealtimeStatus(prodRes.realtimeStatus);
+      setLoadError(null);
       setInitialLoading(false);
 
-      // 2. Fetch Transaction History asynchronously in background without blocking initial render
-      fetchStockTransactions().then((txs) => setTransactions(txs));
-    } catch (err) {
+      // 2. Fetch Transaction History in background without blocking initial render.
+      // Keep any rows we already have (e.g. just-recorded ones) that the fetch didn't return.
+      fetchStockTransactions()
+        .then((txs) =>
+          setTransactions((prev) => {
+            const merged = new Map<string, StockTransaction>();
+            txs.forEach((t) => merged.set(t.id, t));
+            prev.forEach((t) => {
+              if (!merged.has(t.id) && !t.id.startsWith('tx-')) merged.set(t.id, t);
+            });
+            return Array.from(merged.values()).sort(
+              (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+          })
+        )
+        .catch((err) => console.error('Error loading stock history:', err));
+    } catch (err: any) {
       console.error('Error loading central inventory data:', err);
+      setLoadError(err?.message || 'Could not reach the central database.');
+      setRealtimeStatus('reconnecting');
       setInitialLoading(false);
     }
   }, []);
@@ -80,53 +99,53 @@ export function App() {
     loadData();
 
     const unsubscribe = setupRealtimeSync(
-      async (event, payload) => {
+      (event, payload) => {
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setLastRealtimeEvent(`${event} at ${timeStr}`);
 
-        if (event === 'PRODUCTS_CDC' && payload?.new) {
-          if (payload.eventType === 'INSERT') {
-            setProducts((prev) => {
-              const exists = prev.some((p) => p.id === payload.new.id || p.sku === payload.new.sku);
-              return exists ? prev : [payload.new as Product, ...prev];
-            });
-          } else if (payload.eventType === 'UPDATE') {
-            setProducts((prev) =>
-              prev.map((p) => (p.id === payload.new.id || p.sku === payload.new.sku ? (payload.new as Product) : p))
-            );
-          } else if (payload.eventType === 'DELETE' && payload.old) {
+        if (event === 'PRODUCTS_CDC' && payload) {
+          if (payload.eventType === 'INSERT' && payload.new?.id) {
+            const row = normalizeProduct(payload.new);
+            setProducts((prev) => (prev.some((p) => p.id === row.id) ? prev : [row, ...prev]));
+          } else if (payload.eventType === 'UPDATE' && payload.new?.id) {
+            const row = normalizeProduct(payload.new);
+            setProducts((prev) => prev.map((p) => (p.id === row.id ? row : p)));
+          } else if (payload.eventType === 'DELETE' && payload.old?.id) {
             setProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
           }
-        } else if (event === 'TRANSACTIONS_CDC' && payload?.new) {
-          setProducts((currentProducts) => {
-            const prod = currentProducts.find((p) => p.id === payload.new.product_id);
-            const formattedTx: StockTransaction = {
-              ...(payload.new as StockTransaction),
-              product_name: prod?.name || (payload.new as any).product_name || 'Hardware Product',
-              product_sku: prod?.sku || (payload.new as any).product_sku || '',
-              product_brand: prod?.brand || (payload.new as any).product_brand || '',
-              product_image: prod?.image_url || (payload.new as any).product_image || ''
-            };
-            setTransactions((prev) => [formattedTx, ...prev.filter((t) => t.id !== formattedTx.id)]);
-            return currentProducts;
-          });
-        } else {
-          // Refresh from central database
-          const [prodRes, txRes] = await Promise.all([
-            fetchProducts(),
-            fetchStockTransactions()
+        } else if (event === 'TRANSACTIONS_CDC') {
+          if (payload?.eventType !== 'INSERT' || !payload?.new?.id) return;
+          const raw = payload.new as any;
+          const prod = productsRef.current.find((p) => p.id === raw.product_id);
+          const formattedTx: StockTransaction = {
+            ...(raw as StockTransaction),
+            quantity: Number(raw.quantity) || 0,
+            previous_stock: Number(raw.previous_stock) || 0,
+            new_stock: Number(raw.new_stock) || 0,
+            product_name: prod?.name || raw.product_name || 'Hardware Product',
+            product_sku: prod?.sku || raw.product_sku || '',
+            product_brand: prod?.brand || raw.product_brand || '',
+            product_image: prod?.image_url || raw.product_image || ''
+          };
+          setTransactions((prev) => [
+            formattedTx,
+            ...prev.filter(
+              (t) =>
+                t.id !== formattedTx.id &&
+                // drop the local placeholder for this same movement
+                !(
+                  t.id.startsWith('tx-') &&
+                  t.product_id === formattedTx.product_id &&
+                  t.type === formattedTx.type &&
+                  Number(t.new_stock) === formattedTx.new_stock
+                )
+            )
           ]);
-          setProducts(prodRes.products);
-          setTransactions((prev) => {
-            if (!txRes || txRes.length === 0) return prev;
-            const mergedMap = new Map<string, StockTransaction>();
-            txRes.forEach((t) => mergedMap.set(t.id, t));
-            prev.forEach((t) => {
-              if (!mergedMap.has(t.id)) mergedMap.set(t.id, t);
-            });
-            return Array.from(mergedMap.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-          });
+        } else if (event === 'RESUME_TRIGGER' || event === 'RECONNECT_TRIGGER') {
+          // Device woke up / came back online: re-read the central database
+          loadData();
         }
+        // Broadcast messages are informational only; CDC events carry the actual data.
       },
       (status) => {
         setRealtimeStatus(status);
@@ -182,11 +201,11 @@ export function App() {
       quantity: params.quantity,
       reason: params.reason,
       reference: params.reference,
-      userName: 'Raj (Admin)'
+      userName: userRole === 'admin' ? 'Admin' : 'Staff'
     });
 
     setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
-    setTransactions((prev) => [res.transaction, ...prev]);
+    setTransactions((prev) => [res.transaction, ...prev.filter((t) => t.id !== res.transaction.id)]);
   };
 
   const handleStockAdjustmentConfirm = async (params: {
@@ -200,32 +219,70 @@ export function App() {
       type: 'ADJUSTMENT',
       quantity: params.quantity,
       reason: params.reason,
-      userName: 'Raj (Admin)'
+      userName: 'Admin'
     });
 
     setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
-    setTransactions((prev) => [res.transaction, ...prev]);
+    setTransactions((prev) => [res.transaction, ...prev.filter((t) => t.id !== res.transaction.id)]);
+  };
+
+  /**
+   * Product edits must never overwrite stock directly: another device may have
+   * moved stock since this form was opened, and every stock change needs a
+   * history row. A changed stock value is applied as an ADJUSTMENT instead.
+   */
+  const applyProductEdit = async (id: string, updates: Partial<Product>, reason: string) => {
+    const { current_stock: requestedStock, ...fieldUpdates } = updates;
+    let latest = productsRef.current.find((p) => p.id === id);
+
+    if (Object.keys(fieldUpdates).length > 0) {
+      latest = await updateProduct(id, fieldUpdates);
+      const saved = latest;
+      setProducts((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+    }
+
+    if (
+      latest &&
+      requestedStock !== undefined &&
+      Number(requestedStock) !== Number(latest.current_stock)
+    ) {
+      await handleStockAdjustmentConfirm({
+        product: latest,
+        type: 'ADJUSTMENT',
+        quantity: Number(requestedStock),
+        reason
+      });
+    }
   };
 
   const handleSaveProduct = async (productData: Partial<Product>) => {
     if (productForm.product?.id) {
-      const updated = await updateProduct(productForm.product.id, productData);
-      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      const original = productForm.product;
+      const updates = { ...productData };
+      // Only treat stock as edited if the user actually changed the number in the form
+      if (Number(updates.current_stock) === Number(original.current_stock)) {
+        delete updates.current_stock;
+      }
+      await applyProductEdit(original.id, updates, 'Stock corrected via product edit form');
     } else {
       const created = await createProduct(productData as any);
-      setProducts((prev) => [created, ...prev]);
+      setProducts((prev) => (prev.some((p) => p.id === created.id) ? prev : [created, ...prev]));
     }
   };
 
   const handleUpdateProductCell = async (id: string, updates: Partial<Product>) => {
-    const updated = await updateProduct(id, updates);
-    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    const original = productsRef.current.find((p) => p.id === id);
+    const cellUpdates = { ...updates };
+    if (original && Number(cellUpdates.current_stock) === Number(original.current_stock)) {
+      delete cellUpdates.current_stock;
+    }
+    await applyProductEdit(id, cellUpdates, 'Stock corrected via inventory data sheet');
   };
 
   const handleConfirmExcelImport = async (importedProducts: Partial<Product>[]) => {
     for (const prodData of importedProducts) {
       const created = await createProduct(prodData as any);
-      setProducts((prev) => [created, ...prev]);
+      setProducts((prev) => (prev.some((p) => p.id === created.id) ? prev : [created, ...prev]));
     }
   };
 
@@ -264,9 +321,27 @@ export function App() {
 
             <div className="flex items-center gap-2 font-mono text-[11px] text-slate-300">
               <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-              <span>Realtime: <strong className="text-emerald-400">ACTIVE</strong></span>
+              <span>Realtime: {realtimeStatus === 'connected'
+                ? <strong className="text-emerald-400">ACTIVE</strong>
+                : <strong className="text-amber-400">RECONNECTING</strong>}</span>
               <span className="text-slate-500 hidden md:inline">| {lastRealtimeEvent}</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="bg-red-950/80 border-b border-red-500/40 text-red-200 text-xs px-4 py-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <span>
+              <strong>Not connected to the database.</strong> Showing last known data; changes cannot be saved. ({loadError})
+            </span>
+            <button
+              onClick={() => loadData()}
+              className="shrink-0 px-3 py-1 rounded-lg bg-red-500/20 border border-red-500/40 font-bold hover:bg-red-500/30"
+            >
+              Retry
+            </button>
           </div>
         </div>
       )}

@@ -1,102 +1,70 @@
 import { supabase } from '../lib/supabase';
 import { Product, RealtimeStatus } from '../types/inventory';
-import { INITIAL_PRODUCTS } from '../data/seedData';
 import { broadcastGlobalSync } from './realtimeSync';
 
+/** Postgres NUMERIC columns can arrive as strings; normalise them. */
+export function normalizeProduct(p: any): Product {
+  return {
+    ...p,
+    current_stock: Number(p.current_stock) || 0,
+    minimum_stock: Number(p.minimum_stock) || 0,
+    reorder_level: Number(p.reorder_level) || 0,
+    maximum_stock: p.maximum_stock == null ? undefined : Number(p.maximum_stock),
+    purchase_price: Number(p.purchase_price) || 0,
+    selling_price: Number(p.selling_price) || 0,
+    is_active: p.is_active !== false
+  } as Product;
+}
+
+function toError(error: { message?: string } | null | undefined, fallback: string): Error {
+  return new Error(error?.message ? `${fallback}: ${error.message}` : fallback);
+}
+
+/**
+ * Loads all products from the central database. Throws on failure so the UI
+ * can show the connection problem instead of silently displaying demo data.
+ */
 export async function fetchProducts(): Promise<{ products: Product[]; realtimeStatus: RealtimeStatus }> {
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('name', { ascending: true });
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .order('name', { ascending: true });
 
-    if (error) throw error;
+  if (error) throw toError(error, 'Could not load products');
 
-    if (data && data.length > 0) {
-      return { products: data, realtimeStatus: 'connected' };
-    } else {
-      // Seed baseline products directly into central database if empty
-      const { data: seedData, error: seedErr } = await supabase
-        .from('products')
-        .insert(INITIAL_PRODUCTS)
-        .select();
-
-      if (!seedErr && seedData) {
-        return { products: seedData, realtimeStatus: 'connected' };
-      }
-    }
-  } catch (err) {
-    console.error('Supabase fetch products error:', err);
-    return { products: INITIAL_PRODUCTS, realtimeStatus: 'reconnecting' };
-  }
-
-  return { products: INITIAL_PRODUCTS, realtimeStatus: 'connected' };
+  return { products: (data || []).map(normalizeProduct), realtimeStatus: 'connected' };
 }
 
 export async function createProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .insert([productData])
-      .select()
-      .single();
+  const { data, error } = await supabase
+    .from('products')
+    .insert([productData])
+    .select()
+    .single();
 
-    if (!error && data) {
-      broadcastGlobalSync('PRODUCT_CREATE', data);
-      return data;
-    }
-  } catch (err: any) {
-    console.warn('Supabase create product network warning:', err);
-  }
+  if (error || !data) throw toError(error, 'Could not save product');
 
-  const fallback: Product = {
-    ...productData,
-    id: `b1000000-0000-0000-0000-${Date.now().toString().padStart(12, '0')}`,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-  broadcastGlobalSync('PRODUCT_CREATE', fallback);
-  return fallback;
+  const created = normalizeProduct(data);
+  broadcastGlobalSync('PRODUCT_CREATE', created);
+  return created;
 }
 
-export async function updateProduct(id: string, updates: Partial<Product>, productSku?: string): Promise<Product> {
-  const now = new Date().toISOString();
+export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
+  // Never send identity/timestamp columns back to the database
+  const { id: _id, created_at: _c, ...rest } = updates as any;
 
-  try {
-    // 1. Update by ID
-    let { data, error } = await supabase
-      .from('products')
-      .update({ ...updates, updated_at: now })
-      .eq('id', id)
-      .select();
+  const { data, error } = await supabase
+    .from('products')
+    .update({ ...rest, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
 
-    const skuToSearch = updates.sku || productSku;
+  if (error || !data) throw toError(error, 'Could not update product');
 
-    // 2. Fallback to SKU match if ID returned 0 rows
-    if ((!data || data.length === 0 || error) && skuToSearch) {
-      const skuRes = await supabase
-        .from('products')
-        .update({ ...updates, updated_at: now })
-        .eq('sku', skuToSearch)
-        .select();
-
-      if (skuRes.data && skuRes.data.length > 0) {
-        data = skuRes.data;
-      }
-    }
-
-    if (data && data.length > 0) {
-      const updatedProduct = data[0];
-      broadcastGlobalSync('PRODUCT_UPDATE', updatedProduct);
-      return updatedProduct;
-    }
-  } catch (err: any) {
-    console.warn('Supabase update product network warning:', err);
-  }
-
-  const updatedProduct = { id, is_active: true, ...updates, updated_at: now } as Product;
-  broadcastGlobalSync('PRODUCT_UPDATE', updatedProduct);
-  return updatedProduct;
+  const updated = normalizeProduct(data);
+  broadcastGlobalSync('PRODUCT_UPDATE', updated);
+  return updated;
 }
 
 export async function deleteOrDeactivateProduct(id: string, permanent = false): Promise<void> {

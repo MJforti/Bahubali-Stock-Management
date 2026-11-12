@@ -69,11 +69,9 @@ export function setupRealtimeSync(
         console.log('🌐 Supabase Realtime Channel Connection Status:', status);
         if (status === 'SUBSCRIBED') {
           onStatusChange('connected');
-        } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
-          onStatusChange('reconnecting');
-          onSync('RECONNECT_TRIGGER');
         } else {
-          onStatusChange('connected');
+          // CHANNEL_ERROR / TIMED_OUT / CLOSED: data may be stale until resubscribed
+          onStatusChange('reconnecting');
         }
       });
   } catch (err) {
