@@ -12,6 +12,8 @@ import { StockHistoryView } from './components/history/StockHistoryView';
 import { InventoryDataSheet } from './components/datasheet/InventoryDataSheet';
 import { ExcelImportModal } from './components/excel/ExcelImportModal';
 import { isUpdateReady, onUpdateReady, applyUpdate } from './pwa';
+import { NamePicker } from './components/auth/NamePicker';
+import { getCurrentStaff, setCurrentStaff } from './lib/staffNames';
 import { BackupModal } from './components/settings/BackupModal';
 
 import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
@@ -26,6 +28,13 @@ import { AdminPasscodeModal } from './components/auth/AdminPasscodeModal';
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [userRole, setUserRole] = useState<UserRole>('staff'); // STAFF VIEW BY DEFAULT
+  const [currentStaff, setCurrentStaffState] = useState<string | null>(() => getCurrentStaff());
+  const [namePickerOpen, setNamePickerOpen] = useState(false);
+  const pickStaff = (name: string) => {
+    setCurrentStaff(name);
+    setCurrentStaffState(name);
+    setNamePickerOpen(false);
+  };
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('local_demo');
   const [searchQuery, setSearchQuery] = useState('');
   const [adminAuthOpen, setAdminAuthOpen] = useState(false);
@@ -165,7 +174,7 @@ export function App() {
       quantity: params.quantity,
       reason: params.reason,
       reference: params.reference,
-      userName: userRole === 'admin' ? 'Admin' : 'Staff'
+      userName: currentStaff || (userRole === 'admin' ? 'Admin' : 'Staff')
     });
 
     setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
@@ -183,7 +192,7 @@ export function App() {
       type: 'ADJUSTMENT',
       quantity: params.quantity,
       reason: params.reason,
-      userName: 'Admin'
+      userName: currentStaff || 'Admin'
     });
 
     setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
@@ -268,6 +277,8 @@ export function App() {
         onSearchChange={setSearchQuery}
         onOpenSettings={() => setSettingsModalOpen(true)}
         onSync={loadData}
+        currentStaff={currentStaff}
+        onOpenNamePicker={() => setNamePickerOpen(true)}
         onQuickSearchClick={() => setActiveTab('products')}
       />
 
@@ -420,6 +431,16 @@ export function App() {
           existingProducts={products}
           onClose={() => setImportModalOpen(false)}
           onImportConfirmed={handleConfirmExcelImport}
+        />
+      )}
+
+      {/* Who's using the app */}
+      {(!currentStaff || namePickerOpen) && (
+        <NamePicker
+          current={currentStaff}
+          canClose={!!currentStaff}
+          onPick={pickStaff}
+          onClose={() => setNamePickerOpen(false)}
         />
       )}
 

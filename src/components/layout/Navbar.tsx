@@ -12,6 +12,8 @@ interface NavbarProps {
   onOpenSettings: () => void;
   onSync: () => Promise<void>;
   onQuickSearchClick: () => void;
+  currentStaff: string | null;
+  onOpenNamePicker: () => void;
 }
 
 const iconBtn =
@@ -24,7 +26,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSearchChange,
   onOpenSettings,
   onSync,
-  onQuickSearchClick
+  onQuickSearchClick,
+  currentStaff,
+  onOpenNamePicker
 }) => {
   const [syncing, setSyncing] = useState(false);
   const [justSynced, setJustSynced] = useState(false);
@@ -85,6 +89,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button onClick={onOpenSettings} title="Data on this device and backup" className={iconBtn}>
             <HardDrive className="w-4 h-4" strokeWidth={1.5} />
             <span className="hidden lg:inline">Backup</span>
+          </button>
+
+          <button onClick={onOpenNamePicker} title="Change who is using the app" className={`${iconBtn} max-w-[9rem]`}>
+            <span className="w-5 h-5 shrink-0 rounded-full bg-slate-800 text-slate-200 text-xs flex items-center justify-center">
+              {(currentStaff || '?').charAt(0).toUpperCase()}
+            </span>
+            <span className="hidden sm:inline truncate text-slate-200">{currentStaff || 'Pick name'}</span>
           </button>
 
           <button
