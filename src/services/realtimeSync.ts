@@ -1,135 +1,17 @@
-import { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import { Product, StockTransaction, RealtimeStatus } from '../types/inventory';
+import { LocalChange, onOtherTabChange } from '../lib/localDb';
 
-type SyncCallback = (event: string, payload?: any) => void;
-
-let globalRealtimeChannel: RealtimeChannel | null = null;
-
-export function setupRealtimeSync(
-  onSync: SyncCallback,
-  onStatusChange: (status: RealtimeStatus) => void
-) {
-  if (!supabase) {
-    onStatusChange('local_demo');
-    return () => {};
-  }
-
-  const client = supabase;
-
-  // Cleanup existing channel if re-subscribing
-  if (globalRealtimeChannel) {
-    try {
-      client.removeChannel(globalRealtimeChannel);
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  try {
-    globalRealtimeChannel = client
-      .channel('bahubali_central_sync_v3', {
-        config: {
-          broadcast: { self: true }
-        }
-      })
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'products' },
-        (payload) => {
-          console.log('⚡ CDC Postgres Event (products):', payload);
-          onSync('PRODUCTS_CDC', payload);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'stock_transactions' },
-        (payload) => {
-          console.log('⚡ CDC Postgres Event (stock_transactions):', payload);
-          onSync('TRANSACTIONS_CDC', payload);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory_versions' },
-        (payload) => {
-          console.log('⚡ CDC Postgres Event (inventory_versions):', payload);
-          onSync('VERSION_CDC', payload);
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'GLOBAL_INVENTORY_UPDATE' },
-        (payload) => {
-          console.log('⚡ Supabase Cloud Broadcast Received:', payload);
-          onSync('BROADCAST_SYNC', payload);
-        }
-      )
-      .subscribe((status) => {
-        console.log('🌐 Supabase Realtime Channel Connection Status:', status);
-        if (status === 'SUBSCRIBED') {
-          onStatusChange('connected');
-        } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
-          onStatusChange('reconnecting');
-          onSync('RECONNECT_TRIGGER');
-        } else {
-          onStatusChange('connected');
-        }
-      });
-  } catch (err) {
-    console.error('Failed to setup Realtime channel:', err);
-    onStatusChange('reconnecting');
-  }
-
-  // Mobile Browser Resumption Listener (iOS Safari / Android Chrome)
-  const handleVisibilityOrFocus = () => {
-    if (document.visibilityState === 'visible') {
-      console.log('📱 Mobile browser resumed focus - triggering fresh inventory fetch');
-      onSync('RESUME_TRIGGER');
-    }
+/**
+ * Offline mode: keeps other open tabs/windows of the app on this device in
+ * sync, and reloads from the local database when the app regains focus.
+ */
+export function setupRealtimeSync(onChange: (change: LocalChange) => void) {
+  const unsubscribe = onOtherTabChange(onChange);
+  const handleVisible = () => {
+    if (document.visibilityState === 'visible') onChange({ kind: 'reload' });
   };
-
-  if (typeof window !== 'undefined') {
-    window.addEventListener('visibilitychange', handleVisibilityOrFocus);
-    window.addEventListener('focus', handleVisibilityOrFocus);
-    window.addEventListener('online', handleVisibilityOrFocus);
-  }
-
+  document.addEventListener('visibilitychange', handleVisible);
   return () => {
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
-      window.removeEventListener('focus', handleVisibilityOrFocus);
-      window.removeEventListener('online', handleVisibilityOrFocus);
-    }
-    if (globalRealtimeChannel) {
-      try {
-        client.removeChannel(globalRealtimeChannel);
-        globalRealtimeChannel = null;
-      } catch (e) {
-        // ignore
-      }
-    }
+    unsubscribe();
+    document.removeEventListener('visibilitychange', handleVisible);
   };
-}
-
-export function broadcastGlobalSync(eventType = 'PUBLISH_RELEASE', extraData = {}) {
-  if (globalRealtimeChannel) {
-    try {
-      globalRealtimeChannel.send({
-        type: 'broadcast',
-        event: 'GLOBAL_INVENTORY_UPDATE',
-        payload: {
-          event: eventType,
-          timestamp: Date.now(),
-          ...extraData
-        }
-      });
-    } catch (err) {
-      console.warn('Failed to broadcast global sync message:', err);
-    }
-  }
-}
-
-export function triggerGlobalSyncRefreshAll() {
-  broadcastGlobalSync('FORCE_REFRESH_ALL', { initiatedAt: new Date().toISOString() });
 }

@@ -1,7 +1,6 @@
-import React from 'react';
-import { Package, Search, User, ShieldCheck, RefreshCw, Settings, Sparkles, AlertTriangle, RotateCw } from 'lucide-react';
+import React, { useState } from 'react';
+import { Package, Search, User, ShieldCheck, Settings, HardDrive, RefreshCw } from 'lucide-react';
 import { UserRole, RealtimeStatus } from '../../types/inventory';
-import { triggerGlobalSyncRefreshAll } from '../../services/realtimeSync';
 
 interface NavbarProps {
   currentRole: UserRole;
@@ -10,6 +9,7 @@ interface NavbarProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onOpenSettings: () => void;
+  onSync: () => Promise<void>;
   onQuickSearchClick: () => void;
 }
 
@@ -20,8 +20,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   searchQuery,
   onSearchChange,
   onOpenSettings,
+  onSync,
   onQuickSearchClick
 }) => {
+  const [syncing, setSyncing] = useState(false);
+  const [justSynced, setJustSynced] = useState(false);
+
+  const handleSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      await onSync();
+      setJustSynced(true);
+      setTimeout(() => setJustSynced(false), 1500);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-slate-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -75,36 +91,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Realtime Status Indicator */}
             <div className="flex items-center">
-              {realtimeStatus === 'connected' && (
-                <button
-                  onClick={() => {
-                    triggerGlobalSyncRefreshAll();
-                  }}
-                  title="Click to Force Sync & Refresh All Connected Devices Worldwide"
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 active:scale-95 transition-all"
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="hidden xs:inline">Live Sync</span>
-                  <RotateCw className="w-3 h-3 text-emerald-400 opacity-75 hover:opacity-100 ml-0.5" />
-                </button>
-              )}
-              {realtimeStatus === 'reconnecting' && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold">
-                  <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
-                  <span className="hidden xs:inline">Reconnecting</span>
-                </div>
-              )}
-              {realtimeStatus === 'local_demo' && (
-                <button
-                  onClick={onOpenSettings}
-                  title="Running in local mode. Click to configure Supabase."
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold hover:border-amber-500/50 transition-colors"
-                >
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span>Local Engine</span>
-                </button>
-              )}
+              <button
+                onClick={onOpenSettings}
+                title="Data is stored offline on this device. Click for backup."
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold hover:border-amber-500/50 transition-colors"
+              >
+                <HardDrive className="w-3 h-3 text-emerald-400" />
+                <span className="hidden xs:inline">Offline</span>
+              </button>
             </div>
+
+            {/* Sync Button */}
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              title="Sync: reload the latest data"
+              className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs font-bold hover:text-amber-400 hover:border-slate-700 active:scale-95 transition-all disabled:opacity-60"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin text-amber-400' : justSynced ? 'text-emerald-400' : ''}`} />
+              <span className="hidden sm:inline">{syncing ? 'Syncing…' : justSynced ? 'Synced' : 'Sync'}</span>
+            </button>
 
             {/* Role Switcher */}
             <div className="relative flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
@@ -134,7 +140,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenSettings}
               className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-amber-400 hover:border-slate-700 transition-colors"
-              title="Supabase Backend Settings"
+              title="Offline Data & Backup"
             >
               <Settings className="w-4 h-4" />
             </button>

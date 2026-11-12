@@ -48,7 +48,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         </div>
 
         <p className="text-[10px] text-slate-500 font-mono">
-          Powered by Supabase Realtime Engine
+          Offline database · data stays on this device
         </p>
 
       </div>
