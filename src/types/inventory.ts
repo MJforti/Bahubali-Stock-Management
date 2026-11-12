@@ -44,6 +44,10 @@ export interface Product {
   updated_at: string;
   created_by?: string;
   updated_by?: string;
+  /** Stock when the product was first added; stock is replayed from here when phones merge */
+  opening_stock?: number;
+  /** When name, price, rack etc. last changed (not stock). Newest wins when phones merge */
+  details_updated_at?: string;
 }
 
 export interface StockTransaction {

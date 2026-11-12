@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Package, Search, Lock, LockOpen, HardDrive, RefreshCw, Check } from 'lucide-react';
+import { Package, Search, Lock, LockOpen, ArrowLeftRight, RefreshCw, Check } from 'lucide-react';
 import { InstallButton } from './InstallButton';
 import { UserRole, RealtimeStatus } from '../../types/inventory';
 
@@ -86,9 +86,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden sm:inline">{syncing ? 'Syncing' : justSynced ? 'Synced' : 'Sync'}</span>
           </button>
 
-          <button onClick={onOpenSettings} title="Data on this device and backup" className={iconBtn}>
-            <HardDrive className="w-4 h-4" strokeWidth={1.5} />
-            <span className="hidden lg:inline">Backup</span>
+          <button onClick={onOpenSettings} title="Share stock with another phone, or back up" className={iconBtn}>
+            <ArrowLeftRight className="w-4 h-4" strokeWidth={1.5} />
+            <span className="hidden lg:inline">Share</span>
           </button>
 
           <button onClick={onOpenNamePicker} title="Change who is using the app" className={`${iconBtn} max-w-[9rem]`}>

@@ -22,7 +22,14 @@ export async function fetchProducts(): Promise<{ products: Product[]; realtimeSt
 
 export async function createProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
   const now = new Date().toISOString();
-  const product = normalizeProduct({ ...productData, id: newId(), created_at: now, updated_at: now });
+  const product = normalizeProduct({
+    ...productData,
+    id: newId(),
+    created_at: now,
+    updated_at: now,
+    details_updated_at: now,
+    opening_stock: Number(productData.current_stock) || 0
+  });
   if (!product.name?.trim()) throw new Error('Product name is required.');
   if (!product.sku?.trim()) throw new Error('SKU is required.');
 
@@ -41,7 +48,8 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
   const updated = await withTransaction([PRODUCTS], async (tx, get) => {
     const existing = await get<Product>(PRODUCTS, id);
     if (!existing) throw new Error('Product not found.');
-    const next = normalizeProduct({ ...existing, ...rest, id, updated_at: new Date().toISOString() });
+    const now = new Date().toISOString();
+    const next = normalizeProduct({ ...existing, ...rest, id, updated_at: now, details_updated_at: now });
     if (rest.sku && rest.sku !== existing.sku) await assertSkuFree(tx, rest.sku, id);
     tx.objectStore(PRODUCTS).put(next);
     return next;

@@ -463,6 +463,7 @@ export function App() {
       {settingsModalOpen && (
         <BackupModal
           isAdmin={userRole === 'admin'}
+          staffName={currentStaff}
           onClose={() => setSettingsModalOpen(false)}
           onRestored={() => loadData()}
         />
