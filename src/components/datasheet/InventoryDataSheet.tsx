@@ -102,16 +102,16 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
             <thead>
               <tr className="bg-slate-950 border-b border-slate-800 text-xs font-normal text-slate-500">
                 <th className="p-3 w-12 text-center">Photo</th>
-                <th className="p-3 min-w-[200px] sticky left-0 bg-slate-950 z-10 border-r border-slate-800">Product</th>
+                <th className="p-3 min-w-[150px] sm:min-w-[220px]">Product</th>
+                <th className="p-3 min-w-[72px] text-right">Stock</th>
+                <th className="p-3 min-w-[64px]">Unit</th>
+                <th className="p-3 min-w-[80px]">Rack</th>
                 <th className="p-3 min-w-[100px]">Brand</th>
                 <th className="p-3 min-w-[130px]">Category</th>
                 <th className="p-3 min-w-[110px]">SKU</th>
-                <th className="p-3 min-w-[100px] text-right">Stock</th>
-                <th className="p-3 min-w-[80px]">Unit</th>
                 <th className="p-3 min-w-[90px] text-right">Minimum</th>
                 <th className="p-3 min-w-[100px] text-right">Cost</th>
                 <th className="p-3 min-w-[100px] text-right">Price</th>
-                <th className="p-3 min-w-[90px] text-center">Rack</th>
                 <th className="p-3 min-w-[100px] text-center"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
@@ -121,7 +121,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
               {filteredProducts.map((p) => {
                 const isEditing = editingId === p.id;
                 const isLow = p.current_stock > 0 && p.current_stock <= p.minimum_stock;
-                const isOut = p.current_stock === 0;
+                const isOut = p.current_stock <= 0;
 
                 return (
                   <tr key={p.id} className="hover:bg-slate-850/60 transition-colors group">
@@ -134,7 +134,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                     </td>
 
                     {/* Product Name (Sticky Column) */}
-                    <td className="p-3 font-medium text-slate-100 sticky left-0 bg-slate-900 group-hover:bg-slate-850 z-10 border-r border-slate-800">
+                    <td className="p-3 text-slate-100">
                       <button
                         onClick={() => onSelectProduct(p)}
                         className="hover:text-slate-100 text-left transition-colors font-medium"
@@ -142,15 +142,6 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                         {p.name}
                       </button>
                     </td>
-
-                    {/* Brand */}
-                    <td className="p-3 text-slate-300">{p.brand}</td>
-
-                    {/* Category */}
-                    <td className="p-3 text-slate-400">{p.category}</td>
-
-                    {/* SKU */}
-                    <td className="p-3 font-mono text-xs text-slate-500">{p.sku}</td>
 
                     {/* Current Stock (Editable) */}
                     <td className="p-3 text-right">
@@ -172,6 +163,29 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
 
                     {/* Unit */}
                     <td className="p-3 text-slate-400 font-medium">{p.unit}</td>
+
+                    {/* Rack (Editable) */}
+                    <td className="p-3">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editForm.rack ?? p.rack}
+                          onChange={(e) => setEditForm((f) => ({ ...f, rack: e.target.value.toUpperCase() }))}
+                          className="w-16 px-1.5 py-1 bg-slate-950 border border-slate-600 rounded text-xs font-medium text-amber-300"
+                        />
+                      ) : (
+                        p.rack ? <span className="rack-tag">{p.rack}</span> : <span className="text-slate-600">—</span>
+                      )}
+                    </td>
+
+                    {/* Brand */}
+                    <td className="p-3 text-slate-300">{p.brand}</td>
+
+                    {/* Category */}
+                    <td className="p-3 text-slate-400">{p.category}</td>
+
+                    {/* SKU */}
+                    <td className="p-3 font-mono text-xs text-slate-500">{p.sku}</td>
 
                     {/* Minimum Stock (Editable) */}
                     <td className="p-3 text-right">
@@ -212,20 +226,6 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                         />
                       ) : (
                         <span className="text-slate-100">{formatPrice(p.selling_price)}</span>
-                      )}
-                    </td>
-
-                    {/* Rack (Editable) */}
-                    <td className="p-3 text-center">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editForm.rack ?? p.rack}
-                          onChange={(e) => setEditForm((f) => ({ ...f, rack: e.target.value.toUpperCase() }))}
-                          className="w-16 px-1.5 py-1 bg-slate-950 border border-slate-600 rounded text-xs font-medium text-amber-300"
-                        />
-                      ) : (
-                        p.rack ? <span className="rack-tag">{p.rack}</span> : <span className="text-slate-600">—</span>
                       )}
                     </td>
 

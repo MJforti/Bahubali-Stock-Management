@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Upload, FileSpreadsheet, Check, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react';
+import { X, Upload, Check, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react';
 import { Product, ExcelColumnMapping } from '../../types/inventory';
 import { parseExcelFile, autoMapColumns, validateImportRows } from '../../services/excelService';
 
@@ -64,7 +64,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
   const handleRunValidation = () => {
     if (!mapping.name) {
-      setError('Product Name column mapping is required.');
+      setError('Pick which column has the product name');
       return;
     }
 
@@ -78,7 +78,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
   const handleConfirmImport = async () => {
     if (validatedProducts.length === 0) {
-      setError('No valid product rows to import.');
+      setError('No rows with a product name to import');
       return;
     }
 
@@ -99,11 +99,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-slate-500" />
-            <h2 className="text-base font-semibold text-slate-100">
-              Import Excel / CSV Stock Sheet
-            </h2>
+          <div>
+            <h2 className="text-lg font-medium text-slate-100">Import from Excel</h2>
           </div>
 
           <button
@@ -152,10 +149,10 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-slate-200">
-                    Click to browse or drag & drop Excel sheet
+                    Choose an Excel or CSV file
                   </h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    Supports .xlsx, .xls, and .csv files
+                    .xlsx, .xls or .csv
                   </p>
                 </div>
               </div>
@@ -181,7 +178,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                       onChange={(e) => setMapping((m) => ({ ...m, [fieldKey]: e.target.value }))}
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-base sm:text-sm text-slate-200 focus:outline-none focus:border-slate-600"
                     >
-                      <option value="">-- Do Not Import --</option>
+                      <option value="">Skip this column</option>
                       {headers.map((h) => (
                         <option key={h} value={h}>{h}</option>
                       ))}

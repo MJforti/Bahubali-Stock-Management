@@ -64,7 +64,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
       } else if (stockStatusFilter === 'OUT_OF_STOCK') {
         if (p.current_stock > 0) return false;
       } else if (stockStatusFilter === 'IN_STOCK') {
-        if (p.current_stock === 0) return false;
+        if (p.current_stock <= 0) return false;
       }
 
       // Query Search matching Name, Brand, SKU, Category, Rack, Description

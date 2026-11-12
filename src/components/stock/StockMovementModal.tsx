@@ -59,12 +59,12 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) {
-      setError('Please select a product first.');
+      setError('Pick a product first');
       return;
     }
 
     if (quantity <= 0) {
-      setError('Quantity must be greater than zero.');
+      setError('Quantity must be more than zero');
       return;
     }
 

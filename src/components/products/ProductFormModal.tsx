@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Camera, Image as ImageIcon, Upload, Loader2, Sparkles, Check } from 'lucide-react';
+import { X, Camera, Image as ImageIcon, Upload, Loader2, Check } from 'lucide-react';
 import { Product, UnitType } from '../../types/inventory';
 import { uploadProductImage } from '../../services/imageService';
 import { INITIAL_BRANDS, INITIAL_CATEGORIES } from '../../data/seedData';
@@ -66,7 +66,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Product Name is required.');
+      setError('Product name is required');
       return;
     }
 
@@ -117,10 +117,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
-          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-slate-500" />
-            <span>{isEditing ? 'Edit Product Details' : 'Add New Hardware Product'}</span>
-          </h2>
+          <h2 className="text-lg font-medium text-slate-100">{isEditing ? 'Edit product' : 'Add product'}</h2>
 
           <button
             onClick={onClose}
@@ -142,7 +139,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           {/* Product Image Capture / Upload Section */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-slate-300 block">
-              Product Photo (Visual Identification)
+              Photo
             </label>
 
             <div className="flex flex-col sm:flex-row items-center gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800">
@@ -186,7 +183,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 </div>
 
                 <p className="text-xs text-slate-500">
-                  Upload a clear image of the hardware item or brand logo to help shop staff identify stock visually.
+                  A clear photo of the item and its brand helps staff find the right one fast
                 </p>
 
                 {/* Hidden Inputs */}

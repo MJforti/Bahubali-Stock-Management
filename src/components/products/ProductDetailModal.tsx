@@ -15,6 +15,7 @@ import { ArrowDownToLine, ArrowUpFromLine,
   History
 } from 'lucide-react';
 import { ProductPhoto } from '../ui/ProductThumb';
+import { formatPrice } from '../ui/stock';
 import { Product, StockTransaction, UserRole } from '../../types/inventory';
 
 interface ProductDetailModalProps {
@@ -45,7 +46,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const productHistory = transactions.filter((t) => t.product_id === product.id);
 
   const isLow = product.current_stock > 0 && product.current_stock <= product.minimum_stock;
-  const isOut = product.current_stock === 0;
+  const isOut = product.current_stock <= 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 overflow-y-auto">
@@ -53,14 +54,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         
         {/* Modal Header Bar */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-100 bg-slate-850 border border-slate-800 px-2.5 py-1 rounded-lg">
-              {product.brand}
-            </span>
-            <span className="text-xs text-slate-400 font-mono">
-              SKU: {product.sku}
-            </span>
-          </div>
+          <span className="text-sm text-slate-400 truncate">{product.brand}</span>
 
           <div className="flex items-center gap-2">
             {userRole === 'admin' && (
@@ -158,45 +152,22 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
           </div>
 
-          {/* Grid Details (Prices, Supplier, Rack) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            
-            {/* Selling Price */}
-            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-              <span className="text-xs font-medium text-slate-500 block">Price</span>
-              <span className="text-base font-semibold text-slate-100">₹{product.selling_price || 0}</span>
-            </div>
-
-            {/* Purchase Price */}
-            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-              <span className="text-xs font-medium text-slate-500 block">Cost</span>
-              <span className="text-base font-semibold text-slate-300">₹{product.purchase_price || 0}</span>
-            </div>
-
-            {/* Rack Location */}
-            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-              <span className="text-xs font-medium text-slate-500 block">Rack</span>
-              <span className="text-sm font-medium text-slate-200 flex items-center gap-1 mt-0.5">
-                <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                <span>{product.rack || 'Unassigned'}</span>
-              </span>
-            </div>
-
-            {/* Supplier */}
-            <div className="col-span-2 sm:col-span-3 bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Truck className="w-4 h-4 text-slate-400" />
-                <div>
-                  <span className="text-xs font-medium text-slate-500 block">Supplier</span>
-                  <span className="text-xs font-medium text-slate-200">{product.supplier || 'Not specified'}</span>
-                </div>
+          {/* Details */}
+          <dl className="rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800 text-sm">
+            {[
+              ['Rack', product.rack ? <span className="rack-tag">{product.rack}</span> : <span className="text-slate-500">Not set</span>],
+              ['Selling price', <span className="text-slate-100">{formatPrice(product.selling_price)}</span>],
+              ...(userRole === 'admin' ? [['Cost price', <span className="text-slate-300">{formatPrice(product.purchase_price)}</span>]] : []),
+              ['Supplier', <span className="text-slate-300">{product.supplier || 'Not set'}</span>],
+              ['SKU', <span className="font-mono text-xs text-slate-400">{product.sku}</span>],
+              ['Last changed', <span className="text-slate-400">{new Date(product.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>]
+            ].map(([label, value]) => (
+              <div key={label as string} className="flex items-center justify-between gap-4 px-4 h-11">
+                <dt className="text-slate-500">{label}</dt>
+                <dd className="text-right min-w-0 truncate">{value}</dd>
               </div>
-              <span className="text-xs text-slate-500">
-                Updated {new Date(product.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-              </span>
-            </div>
-
-          </div>
+            ))}
+          </dl>
 
           {/* Product Specific History */}
           <div className="space-y-2 border-t border-slate-800 pt-3">

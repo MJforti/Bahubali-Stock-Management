@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sliders, AlertTriangle, Check, Loader2, Package } from 'lucide-react';
+import { X, AlertTriangle, Check, Loader2, Package } from 'lucide-react';
 import { ProductThumb } from '../ui/ProductThumb';
 import { Product } from '../../types/inventory';
 
@@ -20,7 +20,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   onConfirm
 }) => {
   const [physicalStock, setPhysicalStock] = useState<number>(product.current_stock);
-  const [reason, setReason] = useState('Physical stock count verification');
+  const [reason, setReason] = useState('Shelf count');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,12 +29,12 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (physicalStock < 0) {
-      setError('Physical stock cannot be negative.');
+      setError('The count cannot be below zero');
       return;
     }
 
     if (!reason.trim()) {
-      setError('A mandatory audit reason is required for manual stock adjustments.');
+      setError('Add a reason for the correction');
       return;
     }
 
@@ -62,10 +62,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
-          <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-slate-500" />
-            <span>Correct stock count</span>
-          </h2>
+          <h2 className="text-lg font-medium text-slate-100">Correct stock count</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-xl bg-slate-900 text-slate-400 hover:text-slate-100 border border-slate-800"
@@ -90,7 +87,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
               <span className="text-xs  text-slate-400">{product.brand}</span>
               <h3 className="text-xs font-medium text-slate-100 truncate">{product.name}</h3>
               <p className="text-xs text-slate-400">
-                System Stock: <span className="font-medium text-slate-200">{product.current_stock} {product.unit}</span>
+                Recorded stock: <span className="font-medium text-slate-200">{product.current_stock} {product.unit}</span>
               </p>
             </div>
           </div>
@@ -98,7 +95,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
           {/* Physical Count Input */}
           <div className="space-y-1.5 bg-slate-950 p-4 rounded-2xl border border-slate-800">
             <label className="text-xs font-medium text-slate-300 block">
-              Actual Physical Count ({product.unit})
+              Counted on the shelf ({product.unit})
             </label>
             <input
               type="number"
@@ -122,12 +119,12 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
           {/* Mandatory Reason */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-100 block">
-              Mandatory Audit Reason *
+              Reason *
             </label>
             <textarea
               required
               rows={2}
-              placeholder="e.g. Physical inventory verification audit count"
+              placeholder="e.g. Monthly shelf count"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-base sm:text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600"

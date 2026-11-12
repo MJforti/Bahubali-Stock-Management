@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Lock, X, AlertCircle } from 'lucide-react';
+import { X, LockOpen } from 'lucide-react';
 import { logActivity } from '../../lib/activity';
 import { verifyAdminPasscode } from '../../lib/localDb';
 
@@ -23,7 +23,7 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim()) {
-      setError('Please enter the Admin Security Code');
+      setError('Enter the admin code');
       return;
     }
 
@@ -41,7 +41,7 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
         setError('Wrong admin code');
       }
     } catch (err) {
-      setError('Verification error. Please try again.');
+      setError('Something went wrong. Please try again');
     } finally {
       setLoading(false);
     }
@@ -52,72 +52,56 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6 relative animate-in fade-in zoom-in-95">
         
         {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 text-slate-400 hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-800 transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* Header Icon */}
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-slate-850 border border-slate-800 text-slate-100 flex items-center justify-center mx-auto">
-            <Lock className="w-7 h-7" />
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-medium text-slate-100">Admin code</h3>
+            <p className="mt-1 text-sm text-slate-500">Needed to add or edit products, correct counts, import and restore</p>
           </div>
-          <h3 className="text-xl font-semibold text-slate-100">Admin code</h3>
-          <p className="text-xs text-slate-400">
-            Enter the 4-digit master admin code to enable Stock In, Stock Out, and Inventory editing.
-          </p>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-9 h-9 shrink-0 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+          >
+            <X className="w-4 h-4" strokeWidth={1.5} />
+          </button>
         </div>
 
-        {/* Error Alert */}
-        {error && (
-          <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs font-semibold animate-in fade-in">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Form Input */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-2">
-              Admin Passcode
-            </label>
+          <label className="block">
+            <span className="sr-only">Admin code</span>
             <input
               type="password"
+              inputMode="numeric"
+              autoComplete="off"
               maxLength={10}
-              placeholder="Enter Admin Code (Default: 9988)"
+              placeholder="••••"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               autoFocus
-              className="w-full text-center text-2xl font-mono py-3 bg-slate-950 border border-slate-800 rounded-2xl text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600"
+              className="w-full h-14 text-center text-2xl tracking-[0.3em] bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600"
             />
-          </div>
+          </label>
 
-          <div className="flex items-center gap-3 pt-2">
+          {error && <p className="text-sm text-rose-400">{error}</p>}
+
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 font-medium text-xs rounded-2xl transition-colors"
+              className="h-11 rounded-xl border border-slate-800 text-slate-300 text-[15px] hover:bg-slate-850 transition-colors"
             >
-              Cancel (Stay Staff)
+              Cancel
             </button>
             <button
               type="submit"
-              disabled={loading}
-              className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-xs rounded-2xl transition-colors flex items-center justify-center gap-1.5"
+              disabled={loading || !code.trim()}
+              className="h-11 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[15px] font-semibold flex items-center justify-center gap-2 transition-colors active:scale-[0.98] disabled:opacity-50"
             >
-              <ShieldCheck className="w-4 h-4" />
-              <span>{loading ? 'Verifying...' : 'Unlock Admin'}</span>
+              <LockOpen className="w-4 h-4" strokeWidth={2} />
+              {loading ? 'Checking' : 'Unlock'}
             </button>
           </div>
         </form>
-
-        <p className="text-xs text-center text-slate-500 font-mono">
-          Staff users are 100% read-only.
-        </p>
-
       </div>
     </div>
   );
