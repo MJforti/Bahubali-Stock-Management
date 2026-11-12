@@ -48,8 +48,14 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, staffName, on
       const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
       const summary = `${data.products.length} products and ${data.stock_transactions.length} movements`;
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Bahubali stock', text: 'Open in the Bahubali stock app: Share and backup, Get stock from another phone' });
-        return [`Sent ${summary}`];
+        try {
+          await navigator.share({ files: [file], title: 'Bahubali stock', text: 'Open in the Bahubali stock app: Share and backup, Get stock from another phone' });
+          return [`Sent ${summary}`];
+        } catch (err: any) {
+          // Closing the share menu is not an error. Anything else (e.g. desktop Chrome
+          // refusing .json files with "Permission denied") falls back to saving the file.
+          if (err?.name === 'AbortError') throw err;
+        }
       }
       saveFile(file);
       return [`Saved ${summary} as ${name}`, 'Send this file to the other phone, for example on WhatsApp'];
