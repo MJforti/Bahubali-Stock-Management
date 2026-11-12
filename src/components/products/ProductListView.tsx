@@ -221,7 +221,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
                   )}
                 </div>
 
-                {userRole === 'admin' && (
+                {(
                   <div className="shrink-0 flex flex-col gap-1.5">
                     <button
                       onClick={(e) => {

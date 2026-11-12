@@ -124,8 +124,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
 
             {/* Quick Action Buttons */}
-            {userRole === 'admin' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-850">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-850">
                 <button
                   onClick={() => onOpenStockIn(product)}
                   className="h-11 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-[15px] font-semibold transition-colors active:scale-[0.98]"
@@ -142,21 +141,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <span>Stock out</span>
                 </button>
 
-                <button
-                  onClick={() => onOpenAdjustment(product)}
-                  className="col-span-2 sm:col-span-1 h-11 flex items-center justify-center gap-2 text-slate-400 hover:text-slate-100 hover:bg-slate-850 rounded-xl text-[15px] transition-colors"
-                >
-                  <Sliders className="w-4 h-4" strokeWidth={1.5} />
-                  <span>Correct count</span>
-                </button>
-              </div>
-            ) : (
-              <div className="pt-2 border-t border-slate-850 text-center">
-                <span className="text-sm text-slate-500">
-                  Stock changes need the admin code
-                </span>
-              </div>
-            )}
+                {userRole === 'admin' && (
+                  <button
+                    onClick={() => onOpenAdjustment(product)}
+                    className="col-span-2 sm:col-span-1 h-11 flex items-center justify-center gap-2 text-slate-400 hover:text-slate-100 hover:bg-slate-850 rounded-xl text-[15px] transition-colors"
+                  >
+                    <Sliders className="w-4 h-4" strokeWidth={1.5} />
+                    <span>Correct count</span>
+                  </button>
+                )}
+            </div>
           </div>
 
           {/* Grid Details (Prices, Supplier, Rack) */}

@@ -90,13 +90,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <button
             onClick={() => onOpenStockIn()}
-            disabled={!isAdmin}
             className="h-12 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[15px] font-semibold flex items-center gap-3 transition-colors active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
           >
             <ArrowDownToLine className="w-[18px] h-[18px]" strokeWidth={2} />
             Stock in
           </button>
-          <button onClick={() => onOpenStockOut()} disabled={!isAdmin} className={secondaryBtn}>
+          <button onClick={() => onOpenStockOut()} className={secondaryBtn}>
             <ArrowUpFromLine className="w-[18px] h-[18px] text-slate-400" strokeWidth={1.5} />
             Stock out
           </button>
@@ -110,7 +109,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
         {!isAdmin && (
-          <p className="mt-3 text-sm text-slate-500">Stock in, stock out and new products need the admin code</p>
+          <p className="mt-3 text-sm text-slate-500">Adding new products needs the admin code</p>
         )}
       </section>
 
@@ -145,7 +144,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         <p className={`text-lg leading-none font-semibold ${stockTextClass[state]}`}>{formatQty(item.current_stock)}</p>
                         <p className="mt-1 text-xs text-slate-500">min {formatQty(item.minimum_stock)}</p>
                       </div>
-                      {isAdmin && (
+                      {(
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
