@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Table, Search, Edit2, Check, X, MapPin, Eye, Plus, AlertTriangle, Layers } from 'lucide-react';
+import { Search, Edit2, Check, X, Eye, Plus } from 'lucide-react';
+import { ProductThumb } from '../ui/ProductThumb';
+import { formatPrice } from '../ui/stock';
 import { Product, UserRole } from '../../types/inventory';
 
 interface InventoryDataSheetProps {
@@ -53,72 +55,69 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
       await onUpdateProduct(id, editForm);
       setEditingId(null);
     } catch (err) {
-      alert('Failed to update product cell.');
+      alert(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     }
   };
 
   return (
     <div className="space-y-4 pb-20 md:pb-6">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-100 flex items-center gap-2">
-            <Table className="w-5 h-5 text-amber-400" />
-            <span>Interactive Inventory Data Sheet</span>
-          </h2>
-          <p className="text-xs text-slate-400">
-            Spreadsheet-style data grid with inline quick editing and thumbnail previews
+          <h1 className="text-[28px] leading-tight font-medium text-slate-100">Data sheet</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {userRole === 'admin' ? 'Edit stock, prices and racks right in the table' : 'All products in one table'}
           </p>
         </div>
-
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <label className="relative block">
+            <span className="sr-only">Search</span>
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" strokeWidth={1.5} />
             <input
-              type="text"
-              placeholder="Search table rows..."
+              type="search"
+              placeholder="Search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              className="h-9 w-48 pl-9 pr-3 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-600"
             />
-          </div>
-
-          <button
-            onClick={onOpenAddProduct}
-            className="flex items-center gap-1 px-3 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold hover:bg-amber-400"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Row</span>
-          </button>
+          </label>
+          {userRole === 'admin' && (
+            <button
+              onClick={onOpenAddProduct}
+              className="h-9 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-semibold flex items-center gap-2 transition-colors active:scale-[0.98]"
+            >
+              <Plus className="w-4 h-4" strokeWidth={2} />
+              Add product
+            </button>
+          )}
         </div>
       </div>
 
       {/* Spreadsheet Table Container */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs text-slate-300">
+          <table className="w-full text-left border-collapse text-sm text-slate-300">
             
             {/* Table Header */}
             <thead>
-              <tr className="bg-slate-950 border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <tr className="bg-slate-950 border-b border-slate-800 text-xs font-normal text-slate-500">
                 <th className="p-3 w-12 text-center">Photo</th>
-                <th className="p-3 min-w-[200px] sticky left-0 bg-slate-950 z-10 border-r border-slate-800">Product Name</th>
+                <th className="p-3 min-w-[200px] sticky left-0 bg-slate-950 z-10 border-r border-slate-800">Product</th>
                 <th className="p-3 min-w-[100px]">Brand</th>
                 <th className="p-3 min-w-[130px]">Category</th>
                 <th className="p-3 min-w-[110px]">SKU</th>
-                <th className="p-3 min-w-[100px] text-right">Current Stock</th>
+                <th className="p-3 min-w-[100px] text-right">Stock</th>
                 <th className="p-3 min-w-[80px]">Unit</th>
-                <th className="p-3 min-w-[90px] text-right">Min Stock</th>
-                <th className="p-3 min-w-[100px] text-right">Purchase (₹)</th>
-                <th className="p-3 min-w-[100px] text-right">Selling (₹)</th>
+                <th className="p-3 min-w-[90px] text-right">Minimum</th>
+                <th className="p-3 min-w-[100px] text-right">Cost</th>
+                <th className="p-3 min-w-[100px] text-right">Price</th>
                 <th className="p-3 min-w-[90px] text-center">Rack</th>
-                <th className="p-3 min-w-[100px] text-center">Actions</th>
+                <th className="p-3 min-w-[100px] text-center"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
 
             {/* Table Body */}
-            <tbody className="divide-y divide-slate-850">
+            <tbody className="divide-y divide-slate-800">
               {filteredProducts.map((p) => {
                 const isEditing = editingId === p.id;
                 const isLow = p.current_stock > 0 && p.current_stock <= p.minimum_stock;
@@ -129,37 +128,29 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                     
                     {/* Image Thumbnail */}
                     <td className="p-2 text-center">
-                      <div
-                        onClick={() => p.image_url && setEnlargedImage(p.image_url)}
-                        className="w-9 h-9 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden mx-auto flex items-center justify-center cursor-pointer hover:border-amber-500 transition-colors"
-                        title="Click to enlarge photo"
-                      >
-                        {p.image_url ? (
-                          <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-[9px] text-slate-600">No img</span>
-                        )}
-                      </div>
+                      <button onClick={() => p.image_url && setEnlargedImage(p.image_url)} title="Enlarge photo" className="mx-auto block">
+                        <ProductThumb src={p.image_url} alt={p.name} size={36} />
+                      </button>
                     </td>
 
                     {/* Product Name (Sticky Column) */}
-                    <td className="p-3 font-bold text-slate-100 sticky left-0 bg-slate-900 group-hover:bg-slate-850 z-10 border-r border-slate-800">
+                    <td className="p-3 font-medium text-slate-100 sticky left-0 bg-slate-900 group-hover:bg-slate-850 z-10 border-r border-slate-800">
                       <button
                         onClick={() => onSelectProduct(p)}
-                        className="hover:text-amber-400 text-left transition-colors font-bold"
+                        className="hover:text-slate-100 text-left transition-colors font-medium"
                       >
                         {p.name}
                       </button>
                     </td>
 
                     {/* Brand */}
-                    <td className="p-3 font-bold text-amber-400">{p.brand}</td>
+                    <td className="p-3 text-slate-300">{p.brand}</td>
 
                     {/* Category */}
                     <td className="p-3 text-slate-400">{p.category}</td>
 
                     {/* SKU */}
-                    <td className="p-3 font-mono text-slate-400">{p.sku}</td>
+                    <td className="p-3 font-mono text-xs text-slate-500">{p.sku}</td>
 
                     {/* Current Stock (Editable) */}
                     <td className="p-3 text-right">
@@ -168,11 +159,11 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                           type="number"
                           value={editForm.current_stock ?? p.current_stock}
                           onChange={(e) => setEditForm((f) => ({ ...f, current_stock: Number(e.target.value) }))}
-                          className="w-20 px-2 py-1 bg-slate-950 border border-amber-500 rounded text-right font-bold text-emerald-400 text-xs"
+                          className="w-20 px-2 py-1 bg-slate-950 border border-slate-600 rounded font-medium text-emerald-400 text-xs"
                         />
                       ) : (
-                        <span className={`font-black text-sm ${
-                          isOut ? 'text-rose-400' : isLow ? 'text-amber-400' : 'text-emerald-400'
+                        <span className={`font-semibold text-sm ${
+                          isOut ? 'text-rose-400' : isLow ? 'text-amber-400' : 'text-slate-100'
                         }`}>
                           {p.current_stock}
                         </span>
@@ -189,10 +180,10 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                           type="number"
                           value={editForm.minimum_stock ?? p.minimum_stock}
                           onChange={(e) => setEditForm((f) => ({ ...f, minimum_stock: Number(e.target.value) }))}
-                          className="w-16 px-2 py-1 bg-slate-950 border border-amber-500 rounded text-right font-bold text-amber-400 text-xs"
+                          className="w-16 px-2 py-1 bg-slate-950 border border-slate-600 rounded font-medium text-amber-400 text-xs"
                         />
                       ) : (
-                        <span className="font-bold text-slate-300">{p.minimum_stock}</span>
+                        <span className="font-medium text-slate-300">{p.minimum_stock}</span>
                       )}
                     </td>
 
@@ -203,10 +194,10 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                           type="number"
                           value={editForm.purchase_price ?? p.purchase_price}
                           onChange={(e) => setEditForm((f) => ({ ...f, purchase_price: Number(e.target.value) }))}
-                          className="w-20 px-2 py-1 bg-slate-950 border border-amber-500 rounded text-right text-xs text-slate-200"
+                          className="w-20 px-2 py-1 bg-slate-950 border border-slate-600 rounded text-xs text-slate-200"
                         />
                       ) : (
-                        `₹${p.purchase_price || 0}`
+                        formatPrice(p.purchase_price)
                       )}
                     </td>
 
@@ -217,10 +208,10 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                           type="number"
                           value={editForm.selling_price ?? p.selling_price}
                           onChange={(e) => setEditForm((f) => ({ ...f, selling_price: Number(e.target.value) }))}
-                          className="w-20 px-2 py-1 bg-slate-950 border border-amber-500 rounded text-right font-bold text-amber-400 text-xs"
+                          className="w-20 px-2 py-1 bg-slate-950 border border-slate-600 rounded font-medium text-amber-400 text-xs"
                         />
                       ) : (
-                        <span className="font-bold text-amber-400">₹{p.selling_price || 0}</span>
+                        <span className="text-slate-100">{formatPrice(p.selling_price)}</span>
                       )}
                     </td>
 
@@ -231,12 +222,10 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                           type="text"
                           value={editForm.rack ?? p.rack}
                           onChange={(e) => setEditForm((f) => ({ ...f, rack: e.target.value.toUpperCase() }))}
-                          className="w-16 px-1.5 py-1 bg-slate-950 border border-amber-500 rounded text-center text-xs font-bold text-amber-300 uppercase"
+                          className="w-16 px-1.5 py-1 bg-slate-950 border border-slate-600 rounded text-xs font-medium text-amber-300"
                         />
                       ) : (
-                        <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 text-amber-300 font-bold rounded text-[10px]">
-                          {p.rack || '—'}
-                        </span>
+                        p.rack ? <span className="rack-tag">{p.rack}</span> : <span className="text-slate-600">—</span>
                       )}
                     </td>
 
@@ -246,14 +235,14 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => handleSaveEdit(p.id)}
-                            className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-500"
-                            title="Save Row"
+                            className="w-8 h-8 rounded-lg bg-slate-100 text-slate-950 hover:bg-white flex items-center justify-center"
+                            title="Save"
                           >
                             <Check className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setEditingId(null)}
-                            className="p-1 rounded bg-slate-800 text-slate-400 hover:text-slate-200"
+                            className="w-8 h-8 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 flex items-center justify-center"
                             title="Cancel"
                           >
                             <X className="w-3.5 h-3.5" />
@@ -263,15 +252,15 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => handleStartEdit(p)}
-                            className="p-1.5 rounded bg-slate-950 border border-slate-800 text-slate-400 hover:text-amber-400 hover:border-slate-700 transition-colors"
-                            title="Quick Edit Cell"
+                            className="w-8 h-8 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-850 flex items-center justify-center transition-colors"
+                            title="Edit row"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => onSelectProduct(p)}
-                            className="p-1.5 rounded bg-slate-950 border border-slate-800 text-slate-400 hover:text-blue-400 hover:border-slate-700 transition-colors"
-                            title="View Full Specs"
+                            className="w-8 h-8 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-850 flex items-center justify-center transition-colors"
+                            title="Open product"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
@@ -292,7 +281,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
       {enlargedImage && (
         <div
           onClick={() => setEnlargedImage(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4 cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-pointer"
         >
           <div className="relative max-w-lg max-h-[80vh] rounded-2xl bg-slate-900 border border-slate-800 p-2 overflow-hidden shadow-2xl">
             <img src={enlargedImage} alt="Product Photo" className="w-full h-full object-contain max-h-[75vh]" />

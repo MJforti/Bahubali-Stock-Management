@@ -52,11 +52,11 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, onClose, onRe
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
-          <h2 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
-            <HardDrive className="w-5 h-5 text-amber-400" />
+          <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+            <HardDrive className="w-5 h-5 text-slate-500" />
             Offline Data & Backup
           </h2>
           <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-100 border border-slate-800">
@@ -68,7 +68,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, onClose, onRe
           <p className="text-slate-400 text-xs leading-relaxed">
             All products, photos and stock history are stored only in this browser on this device. Nothing is sent to the internet.
           </p>
-          <div className="flex gap-2 items-start text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+          <div className="flex gap-2 items-start text-xs text-amber-300 bg-slate-850 border border-slate-800 rounded-xl p-3">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>Clearing browser data or uninstalling the browser deletes the inventory. Download a backup regularly.</span>
           </div>
@@ -76,7 +76,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, onClose, onRe
           <button
             onClick={handleDownload}
             disabled={busy}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold disabled:opacity-50"
           >
             <Download className="w-4 h-4" /> Download Backup
           </button>
@@ -86,7 +86,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, onClose, onRe
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={busy}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 font-bold hover:border-amber-500/50 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-950 border border-slate-700 text-slate-200 font-medium hover:border-slate-700 disabled:opacity-50"
               >
                 <Upload className="w-4 h-4" /> Restore from Backup
               </button>
@@ -99,7 +99,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, onClose, onRe
               />
             </>
           ) : (
-            <p className="text-[11px] text-slate-500 text-center">Unlock Admin to restore a backup.</p>
+            <p className="text-xs text-slate-500 text-center">Unlock Admin to restore a backup.</p>
           )}
 
           {message && (

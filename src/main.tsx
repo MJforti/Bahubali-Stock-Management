@@ -35,32 +35,18 @@ class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 text-center">
-          <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-4 shadow-2xl">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto text-xl font-bold">
-              ⚠️
-            </div>
-            <h2 className="text-xl font-extrabold text-slate-100">Something went wrong</h2>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              {this.state.error?.message || 'The application encountered an unexpected runtime error.'}
+        <div className="min-h-screen bg-[#141415] text-slate-100 flex items-center justify-center p-6">
+          <div className="max-w-sm w-full rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="text-lg font-medium">Something went wrong</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              {this.state.error?.message || 'The app hit an unexpected error.'} Your stock data is kept on this device.
             </p>
-            <div className="pt-2 flex flex-col gap-2">
-              <button
-                onClick={() => window.location.reload()}
-                className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all"
-              >
-                Reload Application
-              </button>
-              <button
-                onClick={() => {
-                  localStorage.clear();
-                  window.location.reload();
-                }}
-                className="w-full py-2 bg-slate-950 border border-slate-800 text-slate-400 text-xs font-bold rounded-xl hover:text-slate-200"
-              >
-                Reset Local Cache
-              </button>
-            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-5 w-full h-10 rounded-lg bg-slate-100 text-slate-950 text-sm font-medium hover:bg-white transition-colors"
+            >
+              Reload
+            </button>
           </div>
         </div>
       );

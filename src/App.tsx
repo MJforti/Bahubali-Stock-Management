@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { BottomNav, ActiveTab } from './components/layout/BottomNav';
+import { SideNav } from './components/layout/SideNav';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { ProductListView } from './components/products/ProductListView';
 import { ProductDetailModal } from './components/products/ProductDetailModal';
@@ -21,7 +22,6 @@ import { setupRealtimeSync } from './services/realtimeSync';
 
 import { SplashScreen } from './components/layout/SplashScreen';
 import { AdminPasscodeModal } from './components/auth/AdminPasscodeModal';
-import { ShieldCheck, Activity, Database, Radio } from 'lucide-react';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -251,13 +251,15 @@ export function App() {
   };
 
   if (initialLoading) {
-    return <SplashScreen statusMessage="Opening offline inventory database..." />;
+    return <SplashScreen statusMessage="Opening stock register" />;
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
-      
-      {/* Top Navbar */}
+    <div className="min-h-screen bg-[#141415] text-slate-100 md:flex">
+      <SideNav activeTab={activeTab} onTabChange={setActiveTab} onQuickStockClick={() => handleOpenStockIn()} />
+
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen">
+      {/* Top bar */}
       <Navbar
         currentRole={userRole}
         onRoleChange={handleRoleChangeRequest}
@@ -269,37 +271,25 @@ export function App() {
         onQuickSearchClick={() => setActiveTab('products')}
       />
 
-      {/* Admin Realtime Debug Diagnostic Header Bar */}
       {userRole === 'admin' && (
-        <div className="bg-slate-900 border-b border-amber-500/30 text-slate-100 py-2 px-4 sticky top-16 z-25 backdrop-blur-md">
-          <div className="max-w-7xl mx-auto flex items-center justify-between text-xs">
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1.5 font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/30">
-                <ShieldCheck className="w-4 h-4 text-amber-400" />
-                ADMIN MODE
-              </span>
-              <span className="hidden sm:flex items-center gap-1.5 text-slate-400 font-mono text-[11px]">
-                <Database className="w-3.5 h-3.5 text-blue-400" />
-                Offline DB (this device)
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 font-mono text-[11px] text-slate-300">
-              <Radio className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Storage: <strong className="text-emerald-400">OFFLINE</strong></span>
-              <span className="text-slate-500 hidden md:inline">| {lastRealtimeEvent}</span>
-            </div>
-          </div>
+        <div className="border-b border-slate-800 bg-slate-950 px-4 md:px-6 h-9 flex items-center justify-between text-sm">
+          <span className="flex items-center gap-2 text-slate-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            Admin mode
+          </span>
+          <button onClick={() => setUserRole('staff')} className="text-slate-500 hover:text-slate-100 transition-colors">
+            Leave
+          </button>
         </div>
       )}
 
       {updateReady && (
-        <div className="bg-emerald-950/80 border-b border-emerald-500/40 text-emerald-200 text-xs px-4 py-2">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-            <span><strong>A new version of the app is ready.</strong> Your data is kept.</span>
+        <div className="border-b border-slate-800 bg-slate-950 text-slate-300 text-sm px-4 md:px-6 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <span>A new version is ready. Your stock data stays as it is</span>
             <button
               onClick={applyUpdate}
-              className="shrink-0 px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 font-bold hover:bg-emerald-500/30"
+              className="shrink-0 h-8 px-3 rounded-lg bg-slate-100 text-slate-950 font-medium hover:bg-white transition-colors"
             >
               Update now
             </button>
@@ -308,14 +298,14 @@ export function App() {
       )}
 
       {loadError && (
-        <div className="bg-red-950/80 border-b border-red-500/40 text-red-200 text-xs px-4 py-2">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+        <div className="border-b border-rose-500/30 bg-rose-950 text-rose-300 text-sm px-4 md:px-6 py-2">
+          <div className="flex items-center justify-between gap-3">
             <span>
-              <strong>Could not open the offline database.</strong> Changes cannot be saved. ({loadError})
+              Stock data on this device could not be opened, so changes will not save ({loadError})
             </span>
             <button
               onClick={() => loadData()}
-              className="shrink-0 px-3 py-1 rounded-lg bg-red-500/20 border border-red-500/40 font-bold hover:bg-red-500/30"
+              className="shrink-0 h-8 px-3 rounded-lg border border-rose-500/40 font-medium hover:bg-rose-900 transition-colors"
             >
               Retry
             </button>
@@ -324,7 +314,7 @@ export function App() {
       )}
 
       {/* Main Page Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
+      <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 md:px-6 lg:px-8 pt-6 pb-24 md:pb-10">
         
         {activeTab === 'dashboard' && (
           <DashboardView
@@ -370,6 +360,7 @@ export function App() {
         )}
 
       </main>
+      </div>
 
       {/* Mobile Bottom Bar */}
       <BottomNav

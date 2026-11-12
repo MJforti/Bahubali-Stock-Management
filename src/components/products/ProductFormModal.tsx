@@ -112,13 +112,13 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95">
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
-          <h2 className="text-lg font-extrabold text-slate-100 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-amber-400" />
+          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-slate-500" />
             <span>{isEditing ? 'Edit Product Details' : 'Add New Hardware Product'}</span>
           </h2>
 
@@ -141,7 +141,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
           {/* Product Image Capture / Upload Section */}
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+            <label className="text-xs font-medium text-slate-300 block">
               Product Photo (Visual Identification)
             </label>
 
@@ -154,7 +154,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 ) : (
                   <div className="text-center p-2 text-slate-600">
                     <ImageIcon className="w-8 h-8 mx-auto mb-1" />
-                    <span className="text-[10px]">No Photo</span>
+                    <span className="text-xs">No photo</span>
                   </div>
                 )}
               </div>
@@ -167,25 +167,25 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                   <button
                     type="button"
                     onClick={() => cameraInputRef.current?.click()}
-                    className="flex items-center justify-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl text-xs font-bold hover:bg-amber-500/20 transition-all active:scale-95"
+                    className="flex items-center justify-center gap-2 p-3 bg-slate-850 border border-slate-800 text-slate-100 rounded-xl text-xs font-medium hover:bg-slate-850 transition-colors active:scale-[0.98]"
                   >
                     <Camera className="w-4 h-4" />
-                    <span>📷 Take Photo</span>
+                    <span>Take photo</span>
                   </button>
 
                   {/* Gallery Button */}
                   <button
                     type="button"
                     onClick={() => galleryInputRef.current?.click()}
-                    className="flex items-center justify-center gap-2 p-3 bg-slate-900 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all active:scale-95"
+                    className="flex items-center justify-center gap-2 p-3 bg-slate-900 border border-slate-800 text-slate-200 rounded-xl text-xs font-medium hover:bg-slate-800 transition-colors active:scale-[0.98]"
                   >
-                    <ImageIcon className="w-4 h-4 text-blue-400" />
-                    <span>🖼️ Choose Photo</span>
+                    <ImageIcon className="w-4 h-4 text-slate-400" />
+                    <span>Choose photo</span>
                   </button>
 
                 </div>
 
-                <p className="text-[11px] text-slate-500">
+                <p className="text-xs text-slate-500">
                   Upload a clear image of the hardware item or brand logo to help shop staff identify stock visually.
                 </p>
 
@@ -215,53 +215,53 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             
             {/* Name */}
             <div className="sm:col-span-2 space-y-1">
-              <label className="text-xs font-bold text-slate-300">Product Name *</label>
+              <label className="text-xs font-medium text-slate-300">Product name *</label>
               <input
                 type="text"
                 required
                 placeholder="e.g. Bosch 8mm Drill Bit for Concrete"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600"
               />
             </div>
 
             {/* Brand */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">Brand *</label>
+              <label className="text-xs font-medium text-slate-300">Brand *</label>
               <input
                 type="text"
                 required
                 placeholder="e.g. Bosch, Asian Paints, Polycab"
                 value={brand}
                 onChange={(e) => setBrand(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600"
               />
             </div>
 
             {/* Category */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">Category *</label>
+              <label className="text-xs font-medium text-slate-300">Category *</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-slate-600"
               >
                 {INITIAL_CATEGORIES.map((c) => (
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
-                <option value="Other">Other Category</option>
+                <option value="Other">Other category</option>
               </select>
             </div>
 
             {/* SKU */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-300">SKU / Item Code</label>
+                <label className="text-xs font-medium text-slate-300">SKU</label>
                 <button
                   type="button"
                   onClick={handleGenerateSku}
-                  className="text-[10px] text-amber-400 font-bold hover:underline"
+                  className="text-xs text-slate-300 font-medium hover:underline"
                 >
                   Generate
                 </button>
@@ -271,19 +271,19 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 placeholder="e.g. DRL-BOS-8MM"
                 value={sku}
                 onChange={(e) => setSku(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-mono"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600 font-mono"
               />
             </div>
 
             {/* Rack Location */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">Rack / Shelf Location</label>
+              <label className="text-xs font-medium text-slate-300">Rack</label>
               <input
                 type="text"
                 placeholder="e.g. B-12, P-04, E-01"
                 value={rack}
                 onChange={(e) => setRack(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-amber-400 uppercase placeholder-slate-600 focus:outline-none focus:border-amber-500 font-bold"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600 font-medium"
               />
             </div>
 
@@ -291,7 +291,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
           {/* Stock & Unit Section */}
           <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
-            <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+            <h3 className="text-xs font-medium text-slate-100">
               Stock & Measurement
             </h3>
 
@@ -299,11 +299,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               
               {/* Unit */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">Unit of Measure</label>
+                <label className="text-xs font-medium text-slate-300">Unit</label>
                 <select
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-slate-600"
                 >
                   {UNIT_OPTIONS.map((u) => (
                     <option key={u} value={u}>{u}</option>
@@ -313,25 +313,25 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
               {/* Initial Stock */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">Initial Stock Qty</label>
+                <label className="text-xs font-medium text-slate-300">Opening stock</label>
                 <input
                   type="number"
                   min="0"
                   value={currentStock}
                   onChange={(e) => setCurrentStock(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-emerald-400 font-bold focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-emerald-400 font-medium focus:outline-none focus:border-slate-600"
                 />
               </div>
 
               {/* Minimum Stock Level */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">Minimum Stock Level</label>
+                <label className="text-xs font-medium text-slate-300">Minimum stock</label>
                 <input
                   type="number"
                   min="0"
                   value={minimumStock}
                   onChange={(e) => setMinimumStock(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-amber-400 font-bold focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 font-medium focus:outline-none focus:border-slate-600"
                 />
               </div>
 
@@ -343,39 +343,39 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             
             {/* Purchase Price */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">Purchase Price (₹)</label>
+              <label className="text-xs font-medium text-slate-300">Cost price (₹)</label>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={purchasePrice}
                 onChange={(e) => setPurchasePrice(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-slate-600"
               />
             </div>
 
             {/* Selling Price */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">Selling Price (₹)</label>
+              <label className="text-xs font-medium text-slate-300">Selling price (₹)</label>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={sellingPrice}
                 onChange={(e) => setSellingPrice(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-amber-400 font-bold focus:outline-none focus:border-amber-500"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 font-medium focus:outline-none focus:border-slate-600"
               />
             </div>
 
             {/* Supplier */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-300">Supplier Name</label>
+              <label className="text-xs font-medium text-slate-300">Supplier</label>
               <input
                 type="text"
                 placeholder="e.g. Bosch India"
                 value={supplier}
                 onChange={(e) => setSupplier(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-slate-600"
               />
             </div>
 
@@ -386,7 +386,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-slate-950 border border-slate-800 text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors"
+              className="h-11 px-4 border border-slate-800 text-slate-300 rounded-xl text-[15px] hover:bg-slate-850 transition-colors transition-colors"
             >
               Cancel
             </button>
@@ -394,16 +394,16 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-xl text-xs font-extrabold shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all"
+              className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-semibold disabled:opacity-50 transition-colors"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving Product...</span>
+                  <span>Saving</span>
                 </>
               ) : (
                 <>
-                  <Check className="w-4 h-4 stroke-[3]" />
+                  <Check className="w-4 h-4" />
                   <span>{isEditing ? 'Save Changes' : 'Create Product'}</span>
                 </>
               )}

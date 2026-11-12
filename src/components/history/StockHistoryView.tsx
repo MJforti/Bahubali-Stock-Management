@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { History, Search, Filter, ArrowUpRight, ArrowDownLeft, Sliders, Calendar, User, Package } from 'lucide-react';
+import { Search } from 'lucide-react';
+import { ProductThumb } from '../ui/ProductThumb';
+import { formatQty } from '../ui/stock';
 import { StockTransaction, TransactionType } from '../../types/inventory';
 
 interface StockHistoryViewProps {
@@ -41,157 +43,109 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
     });
   }, [transactions, searchQuery, selectedType, selectedUser]);
 
-  return (
-    <div className="space-y-4 pb-20 md:pb-6">
-      
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-100 flex items-center gap-2">
-            <History className="w-5 h-5 text-amber-400" />
-            <span>Stock Movement History Audit Log</span>
-          </h2>
-          <p className="text-xs text-slate-400">
-            Immutable audit record of all Stock In, Stock Out, and Manual Adjustments
-          </p>
-        </div>
+  // Group into days for a register-like reading
+  const groups = useMemo(() => {
+    const map = new Map<string, StockTransaction[]>();
+    filteredTransactions.forEach((t) => {
+      const key = new Date(t.created_at).toDateString();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    });
+    return Array.from(map.entries());
+  }, [filteredTransactions]);
 
-        <span className="text-xs font-bold px-3 py-1 bg-slate-900 border border-slate-800 text-amber-400 rounded-xl">
-          {filteredTransactions.length} Total Logs
-        </span>
+  const dayLabel = (key: string) => {
+    const d = new Date(key);
+    const today = new Date();
+    const yesterday = new Date(Date.now() - 86400000);
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
+  const control =
+    'h-10 w-full rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:border-slate-600';
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-[28px] leading-tight font-medium text-slate-100">History</h1>
+        <p className="mt-1 text-sm text-slate-500">Every stock in, stock out and count correction, newest first</p>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
-        
-        {/* Search */}
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <label className="relative block">
+          <span className="sr-only">Search</span>
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" strokeWidth={1.5} />
           <input
-            type="text"
-            placeholder="Search by product, user, or reason..."
+            type="search"
+            placeholder="Product, person or reason"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+            className={`${control} pl-9 pr-3 placeholder-slate-500`}
           />
-        </div>
-
-        {/* Type Filter */}
-        <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500"
-          >
-            <option value="ALL">All Transaction Types</option>
-            <option value="IN">+ Stock In Only</option>
-            <option value="OUT">− Stock Out Only</option>
-            <option value="ADJUSTMENT">Manual Adjustments</option>
-          </select>
-        </div>
-
-        {/* User Filter */}
-        <div className="flex items-center gap-2">
-          <User className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500"
-          >
-            {usersList.map((u) => (
-              <option key={u} value={u}>{u === 'ALL' ? 'All Staff Members' : u}</option>
-            ))}
-          </select>
-        </div>
-
+        </label>
+        <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} aria-label="Type" className={`${control} px-3`}>
+          <option value="ALL">All movements</option>
+          <option value="IN">Stock in</option>
+          <option value="OUT">Stock out</option>
+          <option value="ADJUSTMENT">Count corrections</option>
+        </select>
+        <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} aria-label="Person" className={`${control} px-3`}>
+          {usersList.map((u) => (
+            <option key={u} value={u}>{u === 'ALL' ? 'Everyone' : u}</option>
+          ))}
+        </select>
       </div>
 
-      {/* Transactions Feed */}
-      <div className="space-y-2.5">
-        {filteredTransactions.map((tx) => {
-          const isAdd = tx.type === 'IN';
-          const isOut = tx.type === 'OUT';
-
-          return (
-            <div
-              key={tx.id}
-              className="p-3.5 bg-slate-900/90 border border-slate-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-700 transition-colors"
-            >
-              <div className="flex items-start gap-3 min-w-0">
-                
-                {/* Type Icon Badge */}
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-black text-sm ${
-                  isAdd
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : isOut
-                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                    : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                }`}>
-                  {isAdd ? (
-                    <ArrowDownLeft className="w-5 h-5" />
-                  ) : isOut ? (
-                    <ArrowUpRight className="w-5 h-5" />
-                  ) : (
-                    <Sliders className="w-5 h-5" />
-                  )}
-                </div>
-
-                <div className="min-w-0 space-y-0.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                      isAdd
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : isOut
-                        ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                    }`}>
-                      {tx.type}
-                    </span>
-                    <h3 className="text-sm font-bold text-slate-100 truncate">
-                      {tx.product_name || 'Hardware Product'}
-                    </h3>
-                  </div>
-
-                  <p className="text-xs text-slate-400">
-                    By <span className="text-amber-400 font-bold">{tx.user_name}</span> • {tx.reason || 'Stock Register Log'}
-                    {tx.reference ? ` (Ref: ${tx.reference})` : ''}
-                  </p>
-
-                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                    <Calendar className="w-3 h-3 text-slate-500" />
-                    <span>{new Date(tx.created_at).toLocaleString()}</span>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Quantity Shift Display */}
-              <div className="flex items-center justify-between sm:justify-end gap-4 pt-2 sm:pt-0 border-t sm:border-0 border-slate-850">
-                <div className="text-right">
-                  <span className={`text-base font-black ${
-                    isAdd ? 'text-emerald-400' : isOut ? 'text-rose-400' : 'text-amber-400'
-                  }`}>
-                    {isAdd ? '+' : isOut ? '-' : ''}{tx.quantity} units
-                  </span>
-                  <p className="text-[11px] text-slate-400 font-mono">
-                    Stock: {tx.previous_stock} → {tx.new_stock}
-                  </p>
-                </div>
-              </div>
-
-            </div>
-          );
-        })}
-
-        {filteredTransactions.length === 0 && (
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-12 text-center text-slate-500 space-y-2">
-            <History className="w-10 h-10 mx-auto text-slate-600" />
-            <p className="text-xs font-semibold">No stock transactions found for the selected filters.</p>
-          </div>
-        )}
-      </div>
-
+      {groups.length === 0 ? (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 px-6 py-12 text-center">
+          <p className="text-base text-slate-200">{transactions.length ? 'Nothing matches these filters' : 'No movements yet'}</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {transactions.length ? 'Try another word or filter' : 'Stock ins and stock outs are recorded here automatically'}
+          </p>
+        </div>
+      ) : (
+        groups.map(([key, items]) => (
+          <section key={key}>
+            <h2 className="mb-2 flex items-baseline justify-between text-sm">
+              <span className="text-slate-300">{dayLabel(key)}</span>
+              <span className="text-slate-500">{items.length} movements</span>
+            </h2>
+            <ul className="rounded-2xl border border-slate-800 bg-slate-900 divide-y divide-slate-800">
+              {items.map((tx) => {
+                const isIn = tx.type === 'IN';
+                const isOut = tx.type === 'OUT';
+                const sign = isIn ? '+' : isOut ? '−' : '';
+                const tone = isIn ? 'text-emerald-400' : isOut ? 'text-rose-400' : 'text-slate-100';
+                const kind = isIn ? 'Stock in' : isOut ? 'Stock out' : 'Count corrected';
+                const time = new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+                return (
+                  <li key={tx.id} className="flex items-center gap-3 px-4 py-3">
+                    <ProductThumb src={tx.product_image} alt={tx.product_name || 'Product'} size={40} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[15px] text-slate-100 truncate">{tx.product_name || 'Product'}</p>
+                      <p className="mt-0.5 text-sm text-slate-500 truncate">
+                        {kind} · {tx.user_name}
+                        {tx.reason ? ` · ${tx.reason}` : ''}
+                        {tx.reference ? ` · Ref ${tx.reference}` : ''}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className={`text-[15px] font-semibold ${tone}`}>
+                        {sign}{formatQty(tx.quantity)}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {formatQty(tx.previous_stock)} → {formatQty(tx.new_stock)} · {time}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))
+      )}
     </div>
   );
 };

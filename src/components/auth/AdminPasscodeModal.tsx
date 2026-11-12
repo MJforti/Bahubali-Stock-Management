@@ -46,23 +46,23 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-6 relative animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6 relative animate-in fade-in zoom-in-95">
         
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 text-slate-400 hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-800 transition-all"
+          className="absolute right-4 top-4 text-slate-400 hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-800 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Header Icon */}
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
-            <Lock className="w-7 h-7 stroke-[2.5]" />
+          <div className="w-14 h-14 rounded-2xl bg-slate-850 border border-slate-800 text-slate-100 flex items-center justify-center mx-auto">
+            <Lock className="w-7 h-7" />
           </div>
-          <h3 className="text-xl font-extrabold text-slate-100">Unlock Admin Mode</h3>
+          <h3 className="text-xl font-semibold text-slate-100">Admin code</h3>
           <p className="text-xs text-slate-400">
             Enter the 4-digit master admin code to enable Stock In, Stock Out, and Inventory editing.
           </p>
@@ -79,7 +79,7 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
         {/* Form Input */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
+            <label className="block text-xs font-medium text-slate-300 mb-2">
               Admin Passcode
             </label>
             <input
@@ -89,7 +89,7 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
               value={code}
               onChange={(e) => setCode(e.target.value)}
               autoFocus
-              className="w-full text-center text-2xl font-mono tracking-widest py-3 bg-slate-950 border border-slate-800 rounded-2xl text-amber-400 placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+              className="w-full text-center text-2xl font-mono py-3 bg-slate-950 border border-slate-800 rounded-2xl text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600"
             />
           </div>
 
@@ -97,14 +97,14 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-xs rounded-2xl transition-all"
+              className="flex-1 py-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 font-medium text-xs rounded-2xl transition-colors"
             >
               Cancel (Stay Staff)
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs rounded-2xl shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5"
+              className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-xs rounded-2xl transition-colors flex items-center justify-center gap-1.5"
             >
               <ShieldCheck className="w-4 h-4" />
               <span>{loading ? 'Verifying...' : 'Unlock Admin'}</span>
@@ -112,7 +112,7 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
           </div>
         </form>
 
-        <p className="text-[10px] text-center text-slate-500 font-mono">
+        <p className="text-xs text-center text-slate-500 font-mono">
           Staff users are 100% read-only.
         </p>
 

@@ -94,14 +94,14 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95">
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-amber-400" />
-            <h2 className="text-base font-extrabold text-slate-100">
+            <FileSpreadsheet className="w-5 h-5 text-slate-500" />
+            <h2 className="text-base font-semibold text-slate-100">
               Import Excel / CSV Stock Sheet
             </h2>
           </div>
@@ -117,7 +117,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         <div className="p-5 space-y-4 max-h-[85vh] overflow-y-auto">
           
           {error && (
-            <div className="p-3 bg-rose-950/90 border border-rose-500/50 rounded-xl text-rose-300 text-xs font-bold flex items-center gap-2">
+            <div className="p-3 bg-rose-950/90 border border-rose-500/50 rounded-xl text-rose-300 text-xs font-medium flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
@@ -134,7 +134,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                     handleFileSelect(e.dataTransfer.files[0]);
                   }
                 }}
-                className="border-2 border-dashed border-slate-800 hover:border-amber-500/50 rounded-3xl p-10 text-center space-y-3 bg-slate-950 transition-colors cursor-pointer"
+                className="border-2 border-dashed border-slate-800 hover:border-slate-700 rounded-2xl p-10 text-center space-y-3 bg-slate-950 transition-colors cursor-pointer"
                 onClick={() => {
                   const input = document.createElement('input');
                   input.type = 'file';
@@ -147,11 +147,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   input.click();
                 }}
               >
-                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+                <div className="w-14 h-14 rounded-2xl bg-slate-850 border border-slate-800 text-slate-100 flex items-center justify-center mx-auto">
                   <Upload className="w-7 h-7" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-200">
+                  <h3 className="text-sm font-medium text-slate-200">
                     Click to browse or drag & drop Excel sheet
                   </h3>
                   <p className="text-xs text-slate-500 mt-1">
@@ -166,20 +166,20 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           {step === 'mapping' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span className="text-xs font-bold text-slate-300">Map Excel Columns to Database Fields</span>
-                <span className="text-[11px] text-slate-500">{rows.length} Rows Found</span>
+                <span className="text-xs font-medium text-slate-300">Match your columns</span>
+                <span className="text-xs text-slate-500">{rows.length} Rows Found</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
                 {Object.keys(mapping).map((fieldKey) => (
                   <div key={fieldKey} className="space-y-1">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase">
+                    <label className="text-xs font-medium text-slate-400">
                       {fieldKey.replace('_', ' ')} {fieldKey === 'name' ? '*' : ''}
                     </label>
                     <select
                       value={(mapping as any)[fieldKey]}
                       onChange={(e) => setMapping((m) => ({ ...m, [fieldKey]: e.target.value }))}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-base sm:text-sm text-slate-200 focus:outline-none focus:border-slate-600"
                     >
                       <option value="">-- Do Not Import --</option>
                       {headers.map((h) => (
@@ -194,16 +194,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep('upload')}
-                  className="px-4 py-2 bg-slate-950 border border-slate-800 text-slate-400 text-xs font-bold rounded-xl"
+                  className="px-4 py-2 bg-slate-950 border border-slate-800 text-slate-400 text-xs font-medium rounded-xl"
                 >
                   Back
                 </button>
                 <button
                   type="button"
                   onClick={handleRunValidation}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-amber-500 text-slate-950 text-xs font-black rounded-xl shadow-lg hover:bg-amber-400"
+                  className="flex items-center gap-1.5 px-5 py-2 bg-amber-500 text-slate-950 text-xs font-semibold rounded-xl hover:bg-amber-400"
                 >
-                  <span>Validate & Preview</span>
+                  <span>Check and preview</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -216,7 +216,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
               
               <div className="flex items-center justify-between bg-slate-950 p-3 rounded-2xl border border-slate-800 text-xs">
                 <div>
-                  <span className="font-bold text-emerald-400 text-sm">{validatedProducts.length} Valid Products Ready</span>
+                  <span className="font-medium text-emerald-400 text-sm">{validatedProducts.length} Valid Products Ready</span>
                   {validationErrors.length > 0 && (
                     <p className="text-rose-400 font-semibold mt-0.5">{validationErrors.length} Errors Skipped</p>
                   )}
@@ -226,7 +226,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
               {/* Preview Grid */}
               <div className="max-h-60 overflow-y-auto border border-slate-800 rounded-xl">
                 <table className="w-full text-left text-xs text-slate-300">
-                  <thead className="bg-slate-950 text-slate-400 text-[10px] uppercase font-bold">
+                  <thead className="bg-slate-950 text-slate-400 text-xs font-medium">
                     <tr>
                       <th className="p-2">Name</th>
                       <th className="p-2">Brand</th>
@@ -238,11 +238,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   <tbody className="divide-y divide-slate-850">
                     {validatedProducts.map((p, idx) => (
                       <tr key={idx} className="hover:bg-slate-850">
-                        <td className="p-2 font-bold text-slate-100">{p.name}</td>
-                        <td className="p-2 text-amber-400 font-semibold">{p.brand}</td>
+                        <td className="p-2 font-medium text-slate-100">{p.name}</td>
+                        <td className="p-2 text-slate-400 ">{p.brand}</td>
                         <td className="p-2 font-mono text-slate-400">{p.sku}</td>
-                        <td className="p-2 text-right font-black text-emerald-400">{p.current_stock} {p.unit}</td>
-                        <td className="p-2 uppercase font-bold text-slate-300">{p.rack || '—'}</td>
+                        <td className="p-2 text-right font-semibold text-emerald-400">{p.current_stock} {p.unit}</td>
+                        <td className="p-2 font-medium text-slate-300">{p.rack || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -254,7 +254,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep('mapping')}
-                  className="px-4 py-2.5 bg-slate-950 border border-slate-800 text-slate-400 text-xs font-bold rounded-xl"
+                  className="px-4 py-2.5 bg-slate-950 border border-slate-800 text-slate-400 text-xs font-medium rounded-xl"
                 >
                   Back to Mapping
                 </button>
@@ -263,17 +263,17 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   type="button"
                   disabled={loading || validatedProducts.length === 0}
                   onClick={handleConfirmImport}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow-lg"
+                  className="h-11 flex items-center gap-2 px-5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[15px] font-semibold rounded-xl transition-colors disabled:opacity-60"
                 >
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Importing Rows...</span>
+                      <span>Importing</span>
                     </>
                   ) : (
                     <>
-                      <Check className="w-4 h-4 stroke-[3]" />
-                      <span>CONFIRM IMPORT ({validatedProducts.length} ITEMS)</span>
+                      <Check className="w-4 h-4" />
+                      <span>Import {validatedProducts.length} products</span>
                     </>
                   )}
                 </button>
