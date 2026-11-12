@@ -199,3 +199,59 @@ export function describeImport(r: ImportResult): string {
   const text = parts.join(' and ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+// ---------- Short 6-character codes (online) ----------
+
+const SHORT_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/** "k7q m2x" / "K7Q-M2X" -> "K7QM2X", or null if it isn't a short code. */
+export function normalizeShortCode(input: string): string | null {
+  const c = input.toUpperCase().replace(/[\s-]/g, '');
+  if (c.length !== 6) return null;
+  for (const ch of c) if (!SHORT_ALPHABET.includes(ch)) return null;
+  return c;
+}
+
+/** "K7QM2X" -> "K7Q M2X" for reading out loud */
+export const formatShortCode = (c: string) => `${c.slice(0, 3)} ${c.slice(3)}`;
+
+async function apiError(res: Response, fallback: string) {
+  try {
+    const body = await res.json();
+    return new Error(body?.error || fallback);
+  } catch {
+    return new Error(fallback);
+  }
+}
+
+/** Uploads this phone's list and returns a short code (needs internet). */
+export async function createShortCode(): Promise<string> {
+  if (!navigator.onLine) throw new Error('No internet. Use the long code or QR code instead');
+  let res: Response;
+  try {
+    res = await fetch('/api/names', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roster: getRoster() })
+    });
+  } catch {
+    throw new Error('No internet. Use the long code or QR code instead');
+  }
+  if (!res.ok) throw await apiError(res, 'Could not make a short code right now');
+  const { code } = await res.json();
+  return code;
+}
+
+/** Looks up a short code and returns the list it holds (needs internet). */
+export async function fetchShortCode(code: string): Promise<RosterEntry[]> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/names?code=${encodeURIComponent(code)}`, { cache: 'no-store' });
+  } catch {
+    throw new Error('Short codes need internet. Try again when connected, or use the long code');
+  }
+  if (!res.ok) throw await apiError(res, 'Could not look up that code');
+  const { roster } = await res.json();
+  if (!Array.isArray(roster)) throw new Error('Could not look up that code');
+  return roster;
+}

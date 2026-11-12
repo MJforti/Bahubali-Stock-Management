@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { UserRound, Plus, X, Check, QrCode, ClipboardPaste, ArrowLeft, Copy, Share2 } from 'lucide-react';
+import { Loader2, UserRound, Plus, X, Check, QrCode, ClipboardPaste, ArrowLeft, Copy, Share2 } from 'lucide-react';
 import {
   addStaffName,
   cleanName,
@@ -10,7 +10,11 @@ import {
   mergeRoster,
   removeStaffName,
   shareLink as buildShareLink,
-  encodeRoster
+  encodeRoster,
+  createShortCode,
+  fetchShortCode,
+  formatShortCode,
+  normalizeShortCode
 } from '../../lib/staffNames';
 
 interface NamePickerProps {
@@ -76,11 +80,47 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
     }
   };
 
-  const importPasted = (e: React.FormEvent) => {
+  // Short code: made automatically when the share screen opens (needs internet)
+  const [shortCode, setShortCode] = useState<string | null>(null);
+  const [shortErr, setShortErr] = useState<string | null>(null);
+  const [shortBusy, setShortBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+
+  const makeShortCode = async () => {
+    setShortBusy(true);
+    setShortErr(null);
+    try {
+      setShortCode(await createShortCode());
+    } catch (err: any) {
+      setShortErr(err?.message || 'Could not make a short code right now');
+    } finally {
+      setShortBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (view === 'share') makeShortCode();
+    else setShortCode(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  const importPasted = async (e: React.FormEvent) => {
     e.preventDefault();
-    const incoming = decodeShared(pasted);
+    let incoming = decodeShared(pasted);
+    const short = incoming ? null : normalizeShortCode(pasted);
+    if (short) {
+      setImportBusy(true);
+      try {
+        incoming = await fetchShortCode(short);
+      } catch (err: any) {
+        setImportMsg(err?.message || 'Could not look up that code');
+        return;
+      } finally {
+        setImportBusy(false);
+      }
+    }
     if (!incoming) {
-      setImportMsg('That is not a name list code. Copy the whole link from the other phone');
+      setImportMsg('That is not a name list code. Short codes are 6 letters and numbers');
       return;
     }
     const result = mergeRoster(incoming);
@@ -137,28 +177,47 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
               <ArrowLeft className="w-4 h-4" strokeWidth={1.5} /> Back
             </button>
             <p className="text-sm text-slate-400">
-              On the other phone, open Get from another phone and enter this code, or scan the QR code with its camera
+              On the other phone, open Get from another phone and enter this code
             </p>
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm text-slate-400">Code</span>
-                <button onClick={copyCode} className="h-8 px-2 -mr-2 rounded-lg text-sm text-slate-300 hover:bg-slate-850 flex items-center gap-1.5 transition-colors">
-                  {codeCopied ? <Check className="w-4 h-4 text-emerald-400" strokeWidth={1.5} /> : <Copy className="w-4 h-4 text-slate-500" strokeWidth={1.5} />}
-                  {codeCopied ? 'Copied' : 'Copy code'}
-                </button>
-              </div>
-              <p
-                onClick={(e) => window.getSelection()?.selectAllChildren(e.currentTarget)}
-                className="max-h-24 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 font-mono text-sm text-slate-100 break-all select-all"
-              >
-                {code}
-              </p>
+            <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-5 text-center">
+              {shortCode ? (
+                <>
+                  <p className="font-mono text-[36px] leading-none font-semibold tracking-[0.12em] text-slate-100 select-all" aria-label={shortCode.split('').join(' ')}>
+                    {formatShortCode(shortCode)}
+                  </p>
+                  <p className="mt-3 text-xs text-slate-500">Works for 7 days. Both phones need internet</p>
+                </>
+              ) : shortBusy ? (
+                <p className="h-[52px] flex items-center justify-center gap-2 text-sm text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.5} /> Making a short code
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-slate-400">{shortErr}</p>
+                  <button onClick={makeShortCode} className="h-9 px-3 rounded-lg border border-slate-800 text-sm text-slate-200 hover:bg-slate-850 transition-colors">
+                    Try again
+                  </button>
+                </div>
+              )}
             </div>
+            <p className="text-sm text-slate-500">No internet? Scan the QR code with the other phone's camera, or use the long code</p>
             <div className="mx-auto w-56 h-56 rounded-xl bg-white p-2 flex items-center justify-center">
               {qr ? <img src={qr} alt="Name list QR code" className="w-full h-full" /> : <QrCode className="w-10 h-10 text-slate-400" />}
             </div>
             <p className="text-center text-sm text-slate-500">{names.length ? `${names.length} names: ${names.join(', ')}` : 'No names. Sharing this clears the list on the other phone'}</p>
             <p className="text-center text-xs text-slate-500">Names you removed on this phone get removed on the other phone too</p>
+            <details>
+              <summary className="cursor-pointer list-none text-sm text-slate-400 hover:text-slate-100">Show long code (works offline)</summary>
+              <div className="mt-2 flex items-center justify-end">
+                <button onClick={copyCode} className="h-8 px-2 -mr-2 rounded-lg text-sm text-slate-300 hover:bg-slate-850 flex items-center gap-1.5 transition-colors">
+                  {codeCopied ? <Check className="w-4 h-4 text-emerald-400" strokeWidth={1.5} /> : <Copy className="w-4 h-4 text-slate-500" strokeWidth={1.5} />}
+                  {codeCopied ? 'Copied' : 'Copy long code'}
+                </button>
+              </div>
+              <p className="mt-1 max-h-24 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 font-mono text-sm text-slate-100 break-all select-all">
+                {code}
+              </p>
+            </details>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={copyLink} className="h-11 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-100 text-[15px] flex items-center justify-center gap-2 transition-colors">
                 {copied ? <Check className="w-4 h-4 text-emerald-400" strokeWidth={1.5} /> : <Copy className="w-4 h-4 text-slate-400" strokeWidth={1.5} />}
@@ -179,7 +238,7 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
               <ArrowLeft className="w-4 h-4" strokeWidth={1.5} /> Back
             </button>
             <p className="text-sm text-slate-400">
-              On a phone that has the list, open the name picker and choose Share list. Paste the code shown there
+              On the phone that has the list, open the name picker and choose Share list. Type the 6-character code shown there, or paste a long code
             </p>
             <textarea
               value={pasted}
@@ -189,16 +248,16 @@ export const NamePicker: React.FC<NamePickerProps> = ({ notice, current, canClos
               }}
               rows={3}
               autoFocus
-              placeholder="Paste code or link"
+              placeholder="Short code, e.g. K7Q M2X"
               className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-600 resize-none"
             />
             {importMsg && <p className="text-sm text-rose-400">{importMsg}</p>}
             <button
               type="submit"
-              disabled={!pasted.trim()}
+              disabled={!pasted.trim() || importBusy}
               className="w-full h-12 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[15px] font-semibold transition-colors active:scale-[0.98] disabled:opacity-50"
             >
-              Add these names
+              {importBusy ? 'Looking up code' : 'Add these names'}
             </button>
           </form>
         )}
