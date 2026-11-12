@@ -10,6 +10,7 @@ import { StockAdjustmentModal } from './components/stock/StockAdjustmentModal';
 import { StockHistoryView } from './components/history/StockHistoryView';
 import { InventoryDataSheet } from './components/datasheet/InventoryDataSheet';
 import { ExcelImportModal } from './components/excel/ExcelImportModal';
+import { isUpdateReady, onUpdateReady, applyUpdate } from './pwa';
 import { BackupModal } from './components/settings/BackupModal';
 
 import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
@@ -35,6 +36,11 @@ export function App() {
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [updateReady, setUpdateReady] = useState(isUpdateReady());
+  useEffect(() => {
+    const off = onUpdateReady(() => setUpdateReady(true));
+    return () => { off(); };
+  }, []);
   const productsRef = useRef<Product[]>([]);
   productsRef.current = products;
 
@@ -283,6 +289,20 @@ export function App() {
               <span>Storage: <strong className="text-emerald-400">OFFLINE</strong></span>
               <span className="text-slate-500 hidden md:inline">| {lastRealtimeEvent}</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {updateReady && (
+        <div className="bg-emerald-950/80 border-b border-emerald-500/40 text-emerald-200 text-xs px-4 py-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <span><strong>A new version of the app is ready.</strong> Your data is kept.</span>
+            <button
+              onClick={applyUpdate}
+              className="shrink-0 px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 font-bold hover:bg-emerald-500/30"
+            >
+              Update now
+            </button>
           </div>
         </div>
       )}

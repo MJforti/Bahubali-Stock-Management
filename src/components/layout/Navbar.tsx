@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Package, Search, User, ShieldCheck, Settings, HardDrive, RefreshCw } from 'lucide-react';
+import { InstallButton } from './InstallButton';
 import { UserRole, RealtimeStatus } from '../../types/inventory';
 
 interface NavbarProps {
@@ -100,6 +101,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="hidden xs:inline">Offline</span>
               </button>
             </div>
+
+            <InstallButton />
 
             {/* Sync Button */}
             <button
