@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Lock, X, AlertCircle } from 'lucide-react';
-import { verifyAdminPasscode } from '../../lib/supabase';
+import { verifyAdminPasscode } from '../../lib/localDb';
 
 interface AdminPasscodeModalProps {
   isOpen: boolean;

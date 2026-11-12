@@ -1,8 +1,6 @@
-import { supabase } from '../lib/supabase';
 import { Product, RealtimeStatus } from '../types/inventory';
-import { broadcastGlobalSync } from './realtimeSync';
+import { PRODUCTS, getAll, withTransaction, assertSkuFree, newId, notifyOtherTabs } from '../lib/localDb';
 
-/** Postgres NUMERIC columns can arrive as strings; normalise them. */
 export function normalizeProduct(p: any): Product {
   return {
     ...p,
@@ -16,65 +14,50 @@ export function normalizeProduct(p: any): Product {
   } as Product;
 }
 
-function toError(error: { message?: string } | null | undefined, fallback: string): Error {
-  return new Error(error?.message ? `${fallback}: ${error.message}` : fallback);
-}
-
-/**
- * Loads all products from the central database. Throws on failure so the UI
- * can show the connection problem instead of silently displaying demo data.
- */
 export async function fetchProducts(): Promise<{ products: Product[]; realtimeStatus: RealtimeStatus }> {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .order('name', { ascending: true });
-
-  if (error) throw toError(error, 'Could not load products');
-
-  return { products: (data || []).map(normalizeProduct), realtimeStatus: 'connected' };
+  const rows = await getAll<Product>(PRODUCTS);
+  const products = rows.map(normalizeProduct).sort((a, b) => a.name.localeCompare(b.name));
+  return { products, realtimeStatus: 'local_demo' };
 }
 
 export async function createProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {
-  const { data, error } = await supabase
-    .from('products')
-    .insert([productData])
-    .select()
-    .single();
+  const now = new Date().toISOString();
+  const product = normalizeProduct({ ...productData, id: newId(), created_at: now, updated_at: now });
+  if (!product.name?.trim()) throw new Error('Product name is required.');
+  if (!product.sku?.trim()) throw new Error('SKU is required.');
 
-  if (error || !data) throw toError(error, 'Could not save product');
+  await withTransaction([PRODUCTS], async (tx) => {
+    await assertSkuFree(tx, product.sku);
+    tx.objectStore(PRODUCTS).put(product);
+  });
 
-  const created = normalizeProduct(data);
-  broadcastGlobalSync('PRODUCT_CREATE', created);
-  return created;
+  notifyOtherTabs({ kind: 'product', product });
+  return product;
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
-  // Never send identity/timestamp columns back to the database
   const { id: _id, created_at: _c, ...rest } = updates as any;
 
-  const { data, error } = await supabase
-    .from('products')
-    .update({ ...rest, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single();
+  const updated = await withTransaction([PRODUCTS], async (tx, get) => {
+    const existing = await get<Product>(PRODUCTS, id);
+    if (!existing) throw new Error('Product not found.');
+    const next = normalizeProduct({ ...existing, ...rest, id, updated_at: new Date().toISOString() });
+    if (rest.sku && rest.sku !== existing.sku) await assertSkuFree(tx, rest.sku, id);
+    tx.objectStore(PRODUCTS).put(next);
+    return next;
+  });
 
-  if (error || !data) throw toError(error, 'Could not update product');
-
-  const updated = normalizeProduct(data);
-  broadcastGlobalSync('PRODUCT_UPDATE', updated);
+  notifyOtherTabs({ kind: 'product', product: updated });
   return updated;
 }
 
 export async function deleteOrDeactivateProduct(id: string, permanent = false): Promise<void> {
   if (permanent) {
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) throw new Error(error.message);
+    await withTransaction([PRODUCTS], async (tx) => {
+      tx.objectStore(PRODUCTS).delete(id);
+    });
+    notifyOtherTabs({ kind: 'product_delete', id });
   } else {
-    const { error } = await supabase.from('products').update({ is_active: false, updated_at: new Date().toISOString() }).eq('id', id);
-    if (error) throw new Error(error.message);
+    await updateProduct(id, { is_active: false });
   }
-
-  broadcastGlobalSync('PRODUCT_DELETE', { id, permanent });
 }

@@ -1,9 +1,8 @@
-import { supabase } from '../lib/supabase';
 import { StockTransaction, TransactionType, Product } from '../types/inventory';
-import { normalizeProduct, updateProduct } from './productService';
-import { broadcastGlobalSync } from './realtimeSync';
+import { PRODUCTS, TRANSACTIONS, getAll, withTransaction, newId, notifyOtherTabs } from '../lib/localDb';
+import { normalizeProduct } from './productService';
 
-function normalizeTransaction(t: any, prod?: any): StockTransaction {
+function withProductInfo(t: StockTransaction, prod?: Product): StockTransaction {
   return {
     ...t,
     quantity: Number(t.quantity) || 0,
@@ -17,27 +16,17 @@ function normalizeTransaction(t: any, prod?: any): StockTransaction {
 }
 
 export async function fetchStockTransactions(): Promise<StockTransaction[]> {
-  const { data, error } = await supabase
-    .from('stock_transactions')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(1000);
-
-  if (error) throw new Error(`Could not load stock history: ${error.message}`);
-  if (!data || data.length === 0) return [];
-
-  const { data: prodData } = await supabase.from('products').select('id, name, sku, brand, image_url');
-  const prodMap = new Map((prodData || []).map((p: any) => [p.id, p]));
-
-  return data.map((t: any) => normalizeTransaction(t, prodMap.get(t.product_id)));
+  const [txs, prods] = await Promise.all([getAll<StockTransaction>(TRANSACTIONS), getAll<Product>(PRODUCTS)]);
+  const prodMap = new Map(prods.map((p) => [p.id, p]));
+  return txs
+    .map((t) => withProductInfo(t, prodMap.get(t.product_id)))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
-/** True when the error means the RPC is not installed in the database (schema.sql not run). */
-function isMissingFunctionError(error: any): boolean {
-  const code = error?.code;
-  return code === 'PGRST202' || code === '42883';
-}
-
+/**
+ * Atomically updates stock and writes the history row in a single IndexedDB
+ * transaction, reading the latest stored stock (not the possibly stale UI copy).
+ */
 export async function recordStockMovement(params: {
   product: Product;
   type: TransactionType;
@@ -46,100 +35,63 @@ export async function recordStockMovement(params: {
   reference?: string;
   userName: string;
 }): Promise<{ product: Product; transaction: StockTransaction }> {
-  const { product, reason, reference, userName } = params;
+  const { reason, reference, userName } = params;
   const type = params.type.toUpperCase().trim() as TransactionType;
+  const qty = Number(params.quantity);
 
-  const currentStockNum = Number(product.current_stock) || 0;
-  const qtyNum = Number(params.quantity);
-
-  if (!Number.isFinite(qtyNum) || qtyNum < 0 || (type !== 'ADJUSTMENT' && qtyNum === 0)) {
+  if (!['IN', 'OUT', 'ADJUSTMENT'].includes(type)) throw new Error(`Invalid stock movement type: ${type}`);
+  if (!Number.isFinite(qty) || qty < 0 || (type !== 'ADJUSTMENT' && qty === 0)) {
     throw new Error('Quantity must be greater than zero.');
   }
-
-  if (type === 'OUT' && currentStockNum < qtyNum) {
-    throw new Error(`Cannot issue ${qtyNum} ${product.unit}(s). Current stock is only ${currentStockNum} ${product.unit}(s).`);
-  }
-
-  if (type === 'ADJUSTMENT' && (!reason || reason.trim().length === 0)) {
+  if (type === 'ADJUSTMENT' && !reason?.trim()) {
     throw new Error('A mandatory audit reason is required for manual stock adjustments.');
   }
 
   const finalReason = reason || (type === 'IN' ? 'Stock In Addition' : type === 'OUT' ? 'Stock Out Issue' : '');
 
-  // 1. Atomic server-side update (locks the row, validates, writes product + history in one transaction)
-  const { data: rpcData, error: rpcError } = await supabase.rpc('record_stock_change', {
-    p_product_id: product.id,
-    p_type: type,
-    p_quantity: qtyNum,
-    p_reason: finalReason,
-    p_reference: reference || '',
-    p_user_name: userName || 'Staff'
+  const result = await withTransaction([PRODUCTS, TRANSACTIONS], async (tx, get) => {
+    const stored = await get<Product>(PRODUCTS, params.product.id);
+    if (!stored) throw new Error('Product not found.');
+    const product = normalizeProduct(stored);
+    const oldStock = product.current_stock;
+
+    let newStock: number;
+    let txQty: number;
+    if (type === 'IN') {
+      newStock = oldStock + qty;
+      txQty = qty;
+    } else if (type === 'OUT') {
+      if (qty > oldStock) {
+        throw new Error(`Cannot issue ${qty} ${product.unit}(s). Current stock is only ${oldStock} ${product.unit}(s).`);
+      }
+      newStock = oldStock - qty;
+      txQty = qty;
+    } else {
+      newStock = qty;
+      txQty = Math.abs(qty - oldStock);
+    }
+
+    const now = new Date().toISOString();
+    const updated: Product = { ...product, current_stock: newStock, updated_at: now, updated_by: userName };
+    const transaction: StockTransaction = {
+      id: newId(),
+      product_id: product.id,
+      type,
+      quantity: txQty,
+      previous_stock: oldStock,
+      new_stock: newStock,
+      reason: finalReason,
+      reference: reference || '',
+      user_name: userName || 'Staff',
+      created_at: now
+    };
+
+    tx.objectStore(PRODUCTS).put(updated);
+    tx.objectStore(TRANSACTIONS).put(transaction);
+    return { product: updated, transaction: withProductInfo(transaction, updated) };
   });
 
-  if (!rpcError && rpcData) {
-    // Newer RPC returns { product, transaction }; older one returns just the product row.
-    const rawProduct = (rpcData as any).product ?? rpcData;
-    const rawTx = (rpcData as any).transaction;
-    const updated = normalizeProduct(rawProduct);
-
-    const transaction = rawTx
-      ? normalizeTransaction(rawTx, updated)
-      : normalizeTransaction(
-          {
-            id: `tx-${Date.now()}`,
-            product_id: updated.id,
-            type,
-            quantity: type === 'ADJUSTMENT' ? Math.abs(updated.current_stock - currentStockNum) : qtyNum,
-            previous_stock: currentStockNum,
-            new_stock: updated.current_stock,
-            reason: finalReason,
-            reference: reference || '',
-            user_name: userName,
-            created_at: new Date().toISOString()
-          },
-          updated
-        );
-
-    broadcastGlobalSync('STOCK_UPDATE', { productId: updated.id, newStock: updated.current_stock });
-    return { product: updated, transaction };
-  }
-
-  if (rpcError && !isMissingFunctionError(rpcError)) {
-    // Real failure (e.g. insufficient stock, network, permissions) — never fake success.
-    throw new Error(rpcError.message || 'Something went wrong. Please try again.');
-  }
-
-  console.warn('record_stock_change RPC not installed; run supabase/schema.sql. Using direct update.');
-
-  // 2. Fallback for databases without the RPC: direct update + history row
-  let newStock = currentStockNum;
-  if (type === 'IN') newStock = currentStockNum + qtyNum;
-  else if (type === 'OUT') newStock = currentStockNum - qtyNum;
-  else newStock = qtyNum;
-
-  const updatedProduct = await updateProduct(product.id, { current_stock: newStock });
-
-  const transactionData = {
-    product_id: updatedProduct.id,
-    type,
-    quantity: type === 'ADJUSTMENT' ? Math.abs(newStock - currentStockNum) : qtyNum,
-    previous_stock: currentStockNum,
-    new_stock: newStock,
-    reason: finalReason,
-    reference: reference || '',
-    user_name: userName
-  };
-
-  const { data: txRow, error: txError } = await supabase
-    .from('stock_transactions')
-    .insert([transactionData])
-    .select()
-    .single();
-
-  if (txError || !txRow) {
-    throw new Error(`Stock updated, but history entry failed: ${txError?.message || 'unknown error'}`);
-  }
-
-  broadcastGlobalSync('STOCK_UPDATE', { productId: updatedProduct.id, newStock });
-  return { product: updatedProduct, transaction: normalizeTransaction(txRow, updatedProduct) };
+  notifyOtherTabs({ kind: 'product', product: result.product });
+  notifyOtherTabs({ kind: 'transaction', transaction: result.transaction });
+  return result;
 }

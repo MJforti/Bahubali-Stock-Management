@@ -10,7 +10,7 @@ import { StockAdjustmentModal } from './components/stock/StockAdjustmentModal';
 import { StockHistoryView } from './components/history/StockHistoryView';
 import { InventoryDataSheet } from './components/datasheet/InventoryDataSheet';
 import { ExcelImportModal } from './components/excel/ExcelImportModal';
-import { SupabaseConfigModal } from './components/settings/SupabaseConfigModal';
+import { BackupModal } from './components/settings/BackupModal';
 
 import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
 import { fetchProducts, createProduct, updateProduct, normalizeProduct } from './services/productService';
@@ -25,10 +25,10 @@ import { ShieldCheck, Activity, Database, Radio } from 'lucide-react';
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [userRole, setUserRole] = useState<UserRole>('staff'); // STAFF VIEW BY DEFAULT
-  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connected');
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('local_demo');
   const [searchQuery, setSearchQuery] = useState('');
   const [adminAuthOpen, setAdminAuthOpen] = useState(false);
-  const [lastRealtimeEvent, setLastRealtimeEvent] = useState<string>('Connected to Central DB');
+  const [lastRealtimeEvent, setLastRealtimeEvent] = useState<string>('Offline database ready');
 
   // Single Authoritative Products & Transactions State
   const [products, setProducts] = useState<Product[]>([]);
@@ -80,8 +80,7 @@ export function App() {
         .catch((err) => console.error('Error loading stock history:', err));
     } catch (err: any) {
       console.error('Error loading central inventory data:', err);
-      setLoadError(err?.message || 'Could not reach the central database.');
-      setRealtimeStatus('reconnecting');
+      setLoadError(err?.message || 'Could not open the offline database.');
       setInitialLoading(false);
     }
   }, []);
@@ -94,70 +93,29 @@ export function App() {
     return () => clearTimeout(splashTimer);
   }, []);
 
-  // Real-time Subscriptions Setup
+  // Load from the offline database, and keep other open tabs on this device in sync
   useEffect(() => {
     loadData();
 
-    const unsubscribe = setupRealtimeSync(
-      (event, payload) => {
-        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        setLastRealtimeEvent(`${event} at ${timeStr}`);
+    const unsubscribe = setupRealtimeSync((change) => {
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setLastRealtimeEvent(`${change.kind} at ${timeStr}`);
 
-        if (event === 'PRODUCTS_CDC' && payload) {
-          if (payload.eventType === 'INSERT' && payload.new?.id) {
-            const row = normalizeProduct(payload.new);
-            setProducts((prev) => (prev.some((p) => p.id === row.id) ? prev : [row, ...prev]));
-          } else if (payload.eventType === 'UPDATE' && payload.new?.id) {
-            const row = normalizeProduct(payload.new);
-            setProducts((prev) => prev.map((p) => (p.id === row.id ? row : p)));
-          } else if (payload.eventType === 'DELETE' && payload.old?.id) {
-            setProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
-          }
-        } else if (event === 'TRANSACTIONS_CDC') {
-          if (payload?.eventType !== 'INSERT' || !payload?.new?.id) return;
-          const raw = payload.new as any;
-          const prod = productsRef.current.find((p) => p.id === raw.product_id);
-          const formattedTx: StockTransaction = {
-            ...(raw as StockTransaction),
-            quantity: Number(raw.quantity) || 0,
-            previous_stock: Number(raw.previous_stock) || 0,
-            new_stock: Number(raw.new_stock) || 0,
-            product_name: prod?.name || raw.product_name || 'Hardware Product',
-            product_sku: prod?.sku || raw.product_sku || '',
-            product_brand: prod?.brand || raw.product_brand || '',
-            product_image: prod?.image_url || raw.product_image || ''
-          };
-          setTransactions((prev) => [
-            formattedTx,
-            ...prev.filter(
-              (t) =>
-                t.id !== formattedTx.id &&
-                // drop the local placeholder for this same movement
-                !(
-                  t.id.startsWith('tx-') &&
-                  t.product_id === formattedTx.product_id &&
-                  t.type === formattedTx.type &&
-                  Number(t.new_stock) === formattedTx.new_stock
-                )
-            )
-          ]);
-        } else if (event === 'RESUME_TRIGGER' || event === 'RECONNECT_TRIGGER') {
-          // Device woke up / came back online: re-read the central database
-          loadData();
-        }
-        // Broadcast messages are informational only; CDC events carry the actual data.
-      },
-      (status) => {
-        setRealtimeStatus(status);
-        if (status === 'connected') {
-          loadData();
-        }
+      if (change.kind === 'product') {
+        const row = normalizeProduct(change.product);
+        setProducts((prev) =>
+          prev.some((p) => p.id === row.id) ? prev.map((p) => (p.id === row.id ? row : p)) : [row, ...prev]
+        );
+      } else if (change.kind === 'product_delete') {
+        setProducts((prev) => prev.filter((p) => p.id !== change.id));
+      } else if (change.kind === 'transaction') {
+        setTransactions((prev) => [change.transaction, ...prev.filter((t) => t.id !== change.transaction.id)]);
+      } else {
+        loadData();
       }
-    );
+    });
 
-    return () => {
-      unsubscribe();
-    };
+    return unsubscribe;
   }, [loadData]);
 
   // Keep detail modal updated with latest stock
@@ -287,7 +245,7 @@ export function App() {
   };
 
   if (initialLoading) {
-    return <SplashScreen statusMessage="Connecting to Bahubali Supabase Central Cloud..." />;
+    return <SplashScreen statusMessage="Opening offline inventory database..." />;
   }
 
   return (
@@ -311,19 +269,17 @@ export function App() {
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1.5 font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/30">
                 <ShieldCheck className="w-4 h-4 text-amber-400" />
-                ADMIN MODE (DIRECT DB WRITES)
+                ADMIN MODE
               </span>
               <span className="hidden sm:flex items-center gap-1.5 text-slate-400 font-mono text-[11px]">
                 <Database className="w-3.5 h-3.5 text-blue-400" />
-                Central PostgreSQL DB
+                Offline DB (this device)
               </span>
             </div>
 
             <div className="flex items-center gap-2 font-mono text-[11px] text-slate-300">
-              <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-              <span>Realtime: {realtimeStatus === 'connected'
-                ? <strong className="text-emerald-400">ACTIVE</strong>
-                : <strong className="text-amber-400">RECONNECTING</strong>}</span>
+              <Radio className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Storage: <strong className="text-emerald-400">OFFLINE</strong></span>
               <span className="text-slate-500 hidden md:inline">| {lastRealtimeEvent}</span>
             </div>
           </div>
@@ -334,7 +290,7 @@ export function App() {
         <div className="bg-red-950/80 border-b border-red-500/40 text-red-200 text-xs px-4 py-2">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
             <span>
-              <strong>Not connected to the database.</strong> Showing last known data; changes cannot be saved. ({loadError})
+              <strong>Could not open the offline database.</strong> Changes cannot be saved. ({loadError})
             </span>
             <button
               onClick={() => loadData()}
@@ -455,9 +411,13 @@ export function App() {
         />
       )}
 
-      {/* Supabase Connection Settings Modal */}
+      {/* Offline Data & Backup Modal */}
       {settingsModalOpen && (
-        <SupabaseConfigModal onClose={() => setSettingsModalOpen(false)} />
+        <BackupModal
+          isAdmin={userRole === 'admin'}
+          onClose={() => setSettingsModalOpen(false)}
+          onRestored={() => loadData()}
+        />
       )}
 
       {/* Admin Security Passcode Unlock Modal */}
