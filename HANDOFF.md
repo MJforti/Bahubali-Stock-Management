@@ -46,10 +46,27 @@ Use this file to hand the project to another AI coding agent, or to a developer.
 - **History tab:**
   - Sections: All, Stock, Products, People and access, Stores and backup, Daily summaries.
   - Every action is logged with who did it and when.
+- **Overview charts** (`src/components/dashboard/OverviewCharts.tsx`):
+  - Stock in and out per day for the last 14 days; tap or hover a day for its figures.
+  - Stock health: in stock / low / out, as a labelled bar.
+  - Stock value by category at cost price.
+  - Most taken out in the last 30 days.
+  - Stock by store, shown only for All stores with more than one store.
+  - Drawn with plain SVG/HTML (no chart library) and follows the selected store.
+  - Colours, already checked for colour-blind separation on the dark surface:
+    - stock in `#3987e5` (blue), stock out `#d95926` (orange);
+    - status: ok `#0ca30c`, low `#fab219`, out `#d03b3b`, always shown with a text label.
+- **PDF stock report** (`src/services/pdfReport.ts`, using jsPDF and jspdf-autotable, loaded only when needed):
+  - "PDF report" button in Products and in the Data sheet, for staff and admin.
+  - Follows the selected store. All stores gets one column per store, in landscape.
+  - Contents: summary boxes, the full stock table, a "To restock" list per store, and page numbers.
+  - Prices are written as "Rs" because the built-in PDF font has no ₹ sign.
+  - Installed iPhone apps use the share sheet; everywhere else the file downloads.
+  - Tested on iPhone: it works.
 - **Data sheet:**
   - A spreadsheet-style view.
   - Excel import, with a downloadable sample sheet that matches the columns.
-  - Export.
+  - Excel export and PDF report.
   - Admins can delete rows.
 - **Backup and alerts window** (header button):
   - Download a backup or restore one.
@@ -71,6 +88,7 @@ Use this file to hand the project to another AI coding agent, or to a developer.
 
 - React 18, TypeScript, Vite, Tailwind CSS. Tailwind's `slate` colours are remapped to graphite greys in `tailwind.config.js`. Font: Plus Jakarta Sans. Icons: lucide-react.
 - `xlsx` for Excel (loaded only when needed). `browser-image-compression` for photos.
+- `jspdf` and `jspdf-autotable` for the PDF report (loaded only when needed).
 - `@supabase/supabase-js` for sync.
 - Hosting: **Vercel**. Pushing to `main` deploys to production at https://bahubali-stock-management.vercel.app.
   - Vercel project: `bahubali-stock-management`, id `prj_1ymGTCCqUKiBFMn62PDhxptuIcEG`
@@ -132,6 +150,8 @@ Every write goes into the local database and the `outbox` in one transaction, so
 | Activity log | `src/lib/activity.ts` (action types, `logActivity`, `setActor`) |
 | Excel | `src/services/excelService.ts` (`SHEET_COLUMNS`, sample sheet, import validation), `src/components/excel/ExcelImportModal.tsx` |
 | Alerts (phone side) | `src/lib/alerts.ts`: on/off, test, daily summary setting, and `refreshAlerts`, which re-registers if an update dropped the registration (an iPhone problem). The setting is remembered in localStorage `bahubali_alerts_wanted`. |
+| Overview | `src/components/dashboard/DashboardView.tsx`, `src/components/dashboard/OverviewCharts.tsx`. `storeFigures` (per-store units and value) is computed in `App.tsx`. |
+| PDF report | `src/services/pdfReport.ts` (`exportStockReportPdf`). `handleExportPdf` in `App.tsx` also logs it to History. |
 | History | `src/components/history/StockHistoryView.tsx`, `src/components/history/DailySummaries.tsx` (reads the `daily_summaries` table and keeps a copy in localStorage for offline) |
 | Types | `src/types/inventory.ts` |
 
@@ -179,6 +199,7 @@ The SQL files in `supabase/` have all been applied to the live project, in this 
 - Supabase, Vercel and GitHub tool calls are auto-approved (`.claude/settings.json`).
 
 ## 6. Known caveats and where things stand
+- **Charts and reports read only the phone's local data**, so a phone shows figures as of its last sync.
 - **iPhone notifications** only work when the app is added to the Home Screen and opened from there. An update could drop the push registration. The app now re-registers when it opens or comes back to the front (`refreshAlerts`, plus `pushsubscriptionchange`). This was not yet confirmed on a real iPhone across a full update.
 - If the boot rescue screen appears, its "Reload app" button clears the app's cached files and service worker; data stays safe. The grey text at the bottom shows the actual error. Ask the owner for a screenshot.
 - `push_subscriptions` may contain a few dead iPhone registrations. They are removed automatically the first time Apple returns 410.
@@ -198,7 +219,10 @@ The SQL files in `supabase/` have all been applied to the live project, in this 
 10. Transfers between stores.
 11. Low stock push alerts; a send test alert button; a fix for the black screen after updates.
 12. Daily 8 PM summary that only the scheduled job can trigger, saved and shown in History.
-13. iPhone alerts re-register after app updates.
+13. iPhone alerts re-register after app updates. Confirmed working on iPhone (test alert, low stock alert and summary).
+14. PDF stock report. Works on iPhone.
+15. Overview charts. Work on the owner's phone.
+16. Handoff file (this one). `.claude/settings.json` auto-approves Supabase, Vercel and GitHub tool calls.
 
 ## 8. How to verify changes
 - `npm run build` must pass.
