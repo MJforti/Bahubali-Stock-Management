@@ -19,6 +19,7 @@ Use this file to hand the project to another AI coding agent, or to a developer.
 > 6. **Design for phones first.** Check every screen at 390px wide. Tap targets should be at least 44px.
 > 7. **Tell the truth about testing.** If you couldn't test something, such as a real phone notification, say so.
 > 8. Don't put any model or AI names in commits or code.
+> 9. **Keep this file up to date.** Any change to a feature, file, database object or known caveat updates `HANDOFF.md` in the same commit, including a line in "Feature history".
 >
 > The task is: **<describe what you want here>**
 
@@ -197,6 +198,7 @@ The SQL files in `supabase/` have all been applied to the live project, in this 
 - Dark theme only. Keep the UI clean, organised and not crowded.
 - Staff can do stock in, out and transfers, and can see cost price, without the admin code.
 - Supabase, Vercel and GitHub tool calls are auto-approved (`.claude/settings.json`).
+- Keep `HANDOFF.md` updated with every change (also stated in `CLAUDE.md`).
 
 ## 6. Known caveats and where things stand
 - **Charts and reports read only the phone's local data**, so a phone shows figures as of its last sync.
