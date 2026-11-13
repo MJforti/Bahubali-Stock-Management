@@ -20,6 +20,7 @@ import { ALL_STORES, STORES_CHANGED_EVENT, StoreScope, fetchStores, getSavedScop
 import { Layers, Warehouse, ChevronDown, RefreshCw, Loader2 } from 'lucide-react';
 import { BackupModal } from './components/settings/BackupModal';
 import { refreshAlerts } from './lib/alerts';
+import { exportStockReportPdf } from './services/pdfReport';
 
 import { MAIN_STORE_ID, Product, StockTransaction, Store, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
 import { fetchProducts, createProduct, updateProduct, normalizeProduct } from './services/productService';
@@ -407,6 +408,14 @@ export function App() {
     scope === ALL_STORES
       ? products
       : products.filter((p) => scope in stockMap(p)).map((p) => ({ ...p, current_stock: stockIn(p, scope) }));
+  const handleExportPdf = async () => {
+    try {
+      const { products: n } = await exportStockReportPdf(products, { stores: activeStores, scope, by: currentStaff || (userRole === 'admin' ? 'Admin' : 'Staff') });
+      logActivity('data.exported', `Exported a stock report PDF (${n} products, ${scopeLabel})`);
+    } catch (err: any) {
+      alert(err?.message || 'Could not make the PDF. Please try again');
+    }
+  };
   const scopedTransactions =
     scope === ALL_STORES ? transactions : transactions.filter((t) => (t.store_id || MAIN_STORE_ID) === scope);
 
@@ -556,6 +565,7 @@ export function App() {
             onOpenStockOut={(prod) => handleOpenStockOut(prod)}
             onOpenEditProduct={(prod) => setProductForm({ open: true, product: prod })}
             onOpenImportModal={() => setImportModalOpen(true)}
+            onExportPdf={handleExportPdf}
             onExportExcel={() => {
               exportInventoryToExcel(products, { stores: activeStores, scope });
               logActivity('data.exported', `Exported ${scopedProducts.filter((p) => p.is_active !== false).length} products to Excel (${scopeLabel})`);
@@ -579,6 +589,7 @@ export function App() {
             onSelectProduct={(prod) => setSelectedProductForDetail(prod)}
             onOpenAddProduct={() => setProductForm({ open: true, product: null })}
             onRemoveProduct={handleRemoveProduct}
+            onExportPdf={handleExportPdf}
           />
         )}
 

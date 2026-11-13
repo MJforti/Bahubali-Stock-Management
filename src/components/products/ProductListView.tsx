@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Upload, Download, ArrowDownToLine, ArrowUpFromLine, X } from 'lucide-react';
+import { Search, Plus, Upload, Download, ArrowDownToLine, ArrowUpFromLine, X, FileText } from 'lucide-react';
 import { Product, UserRole } from '../../types/inventory';
 import { ProductThumb } from '../ui/ProductThumb';
 import { formatPrice, formatQty, stockDotClass, stockLabel, stockState, stockTextClass } from '../ui/stock';
@@ -16,6 +16,7 @@ interface ProductListViewProps {
   onOpenEditProduct: (product: Product) => void;
   onOpenImportModal: () => void;
   onExportExcel: () => void;
+  onExportPdf: () => void;
 }
 
 export const ProductListView: React.FC<ProductListViewProps> = ({
@@ -29,7 +30,8 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
   onOpenStockOut,
   onOpenEditProduct,
   onOpenImportModal,
-  onExportExcel
+  onExportExcel,
+  onExportPdf
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
@@ -117,7 +119,11 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
           )}
           <button onClick={onExportExcel} className={toolBtn}>
             <Download className="w-4 h-4 text-slate-500" strokeWidth={1.5} />
-            Export
+            Excel
+          </button>
+          <button onClick={onExportPdf} className={toolBtn}>
+            <FileText className="w-4 h-4 text-slate-500" strokeWidth={1.5} />
+            PDF report
           </button>
           {userRole === 'admin' && (
             <button

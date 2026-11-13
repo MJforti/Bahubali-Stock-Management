@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Edit2, Check, X, Eye, Plus, Trash2, Upload, Download } from 'lucide-react';
+import { Search, Edit2, Check, X, Eye, Plus, Trash2, Upload, Download, FileText } from 'lucide-react';
 import { downloadSampleSheet } from '../../services/excelService';
 import { ProductThumb } from '../ui/ProductThumb';
 import { formatPrice } from '../ui/stock';
@@ -17,6 +17,7 @@ interface InventoryDataSheetProps {
   scopeLabel: string;
   /** Stock can only be edited when one store is selected (All stores shows totals) */
   canEditStock: boolean;
+  onExportPdf: () => void;
 }
 
 export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
@@ -29,7 +30,8 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
   onOpenImport,
   stores,
   scopeLabel,
-  canEditStock
+  canEditStock,
+  onExportPdf
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -93,6 +95,15 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
               className="h-9 w-48 pl-9 pr-3 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-600"
             />
           </label>
+          <button
+            onClick={onExportPdf}
+            title="Download a stock report as PDF"
+            className="h-9 px-3 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-300 text-sm flex items-center gap-2 transition-colors"
+          >
+            <FileText className="w-4 h-4 text-slate-500" strokeWidth={1.5} />
+            <span className="hidden sm:inline">PDF report</span>
+            <span className="sm:hidden">PDF</span>
+          </button>
           {userRole === 'admin' && (
             <>
               <button
