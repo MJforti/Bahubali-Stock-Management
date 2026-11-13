@@ -3,6 +3,7 @@ import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, PackagePlus, Search, 
 import { Product, StockTransaction, UserRole } from '../../types/inventory';
 import { ProductThumb } from '../ui/ProductThumb';
 import { formatQty, stockState, stockTextClass } from '../ui/stock';
+import { OverviewCharts, StoreFigure } from './OverviewCharts';
 
 interface DashboardViewProps {
   products: Product[];
@@ -16,6 +17,7 @@ interface DashboardViewProps {
   onOpenAddProduct: () => void;
   onGoToProductsSearch: () => void;
   onSelectProduct: (product: Product) => void;
+  storeFigures: StoreFigure[];
 }
 
 const isToday = (iso: string) => {
@@ -44,7 +46,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenStockOut,
   onOpenAddProduct,
   onGoToProductsSearch,
-  onSelectProduct
+  onSelectProduct,
+  storeFigures
 }) => {
   const isAdmin = userRole === 'admin';
   const active = products.filter((p) => p.is_active !== false);
@@ -125,6 +128,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="mt-3 text-sm text-slate-500">Adding new products needs the admin code</p>
         )}
       </section>
+
+      {/* Charts */}
+      <OverviewCharts products={products} transactions={transactions} stores={storeFigures} />
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         {/* Reorder list */}

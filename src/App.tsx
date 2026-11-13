@@ -550,6 +550,18 @@ export function App() {
             onOpenAddProduct={() => setProductForm({ open: true, product: null })}
             onGoToProductsSearch={() => setActiveTab('products')}
             onSelectProduct={(prod) => setSelectedProductForDetail(prod)}
+            storeFigures={
+              scope === ALL_STORES
+                ? activeStores.map((st) => {
+                    const live = products.filter((p) => p.is_active !== false);
+                    return {
+                      name: st.name,
+                      units: live.reduce((a, p) => a + Math.max(0, stockIn(p, st.id)), 0),
+                      value: live.reduce((a, p) => a + Math.max(0, stockIn(p, st.id)) * (Number(p.purchase_price) || 0), 0)
+                    };
+                  })
+                : []
+            }
           />
         )}
 
