@@ -28,7 +28,9 @@ export type ActivityAction =
   | 'data.exported'
   | 'data.store_added'
   | 'data.store_renamed'
-  | 'data.store_removed';
+  | 'data.store_removed'
+  | 'data.alerts_on'
+  | 'data.alerts_off';
 
 export interface FieldChange {
   field: string;

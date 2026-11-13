@@ -115,7 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             );
           })()}
 
-          <button onClick={onOpenSettings} title="Backup" className={iconBtn}>
+          <button onClick={onOpenSettings} title="Backup and alerts" className={iconBtn}>
             <HardDrive className="w-4 h-4" strokeWidth={1.5} />
             <span className="hidden lg:inline">Backup</span>
           </button>

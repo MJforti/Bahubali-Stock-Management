@@ -18,8 +18,7 @@ import {
   Download,
   Upload,
   Package,
-  Warehouse
-} from 'lucide-react';
+  Warehouse, Bell, BellOff } from 'lucide-react';
 import { ProductThumb } from '../ui/ProductThumb';
 import { realReason, formatQty } from '../ui/stock';
 import { MAIN_STORE_ID, Product, StockTransaction, Store } from '../../types/inventory';
@@ -74,7 +73,9 @@ const ACTION_ICON: Record<ActivityAction, typeof Package> = {
   'data.exported': FileSpreadsheet,
   'data.store_added': Warehouse,
   'data.store_renamed': Warehouse,
-  'data.store_removed': Warehouse
+  'data.store_removed': Warehouse,
+  'data.alerts_on': Bell,
+  'data.alerts_off': BellOff
 };
 
 /** One row in the list, whether it came from a stock movement or the activity log. */

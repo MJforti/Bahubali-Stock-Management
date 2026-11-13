@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { X, Download, Upload, Loader2, Cloud } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Download, Upload, Loader2, Cloud, Bell } from 'lucide-react';
+import { AlertsState, alertsState, turnAlertsOff, turnAlertsOn } from '../../lib/alerts';
 import { exportBackup, restoreBackup, notifyOtherTabs } from '../../lib/localDb';
 import { logActivity } from '../../lib/activity';
 import { resendEverything, SyncStatus } from '../../lib/sync';
@@ -28,6 +29,32 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, syncStatus, o
   const restoreRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<null | 'backup' | 'restore'>(null);
   const [message, setMessage] = useState<{ ok: boolean; lines: string[] } | null>(null);
+  const [alerts, setAlerts] = useState<AlertsState | null>(null);
+  const [alertsBusy, setAlertsBusy] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    alertsState().then(setAlerts, () => setAlerts('unsupported'));
+  }, []);
+
+  const toggleAlerts = async () => {
+    setAlertsBusy(true);
+    setAlertsError(null);
+    try {
+      if (alerts === 'on') {
+        await turnAlertsOff();
+        await logActivity('data.alerts_off', 'Turned off low stock alerts on this phone');
+      } else {
+        await turnAlertsOn();
+        await logActivity('data.alerts_on', 'Turned on low stock alerts on this phone');
+      }
+    } catch (err: any) {
+      setAlertsError(err?.message || 'Something went wrong. Please try again');
+    } finally {
+      setAlerts(await alertsState().catch(() => 'unsupported' as const));
+      setAlertsBusy(false);
+    }
+  };
 
   const run = async (kind: NonNullable<typeof busy>, fn: () => Promise<string[]>) => {
     setBusy(kind);
@@ -79,7 +106,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, syncStatus, o
       <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900">
         <div className="flex items-start justify-between gap-3 p-5 pb-2">
           <div>
-            <h2 className="text-lg font-medium text-slate-100">Backup</h2>
+            <h2 className="text-lg font-medium text-slate-100">Backup and alerts</h2>
             <p className="mt-1 text-sm text-slate-500">Stock is shared live between phones through the central database</p>
           </div>
           <button onClick={onClose} aria-label="Close" className="w-9 h-9 shrink-0 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors">
@@ -120,6 +147,41 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, syncStatus, o
             ))}
           </div>
         )}
+
+        <section className="px-5 pt-5">
+          <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Bell className="w-[18px] h-[18px] shrink-0 text-slate-400" strokeWidth={1.5} />
+              <span className="flex-1 min-w-0">
+                <span className="block text-[15px] text-slate-100">Low stock alerts</span>
+                <span className="block text-sm text-slate-500">
+                  {alerts === 'on'
+                    ? 'This phone is notified when a product runs low or out, even with the app closed'
+                    : alerts === 'needs-install'
+                    ? 'On iPhone, add the app to the Home Screen first (Share, then Add to Home Screen), then open it from there'
+                    : alerts === 'blocked'
+                    ? 'Notifications are blocked for this app. Allow them in the phone or browser settings'
+                    : alerts === 'unsupported'
+                    ? 'This browser cannot show alerts. Try Chrome, or install the app'
+                    : 'Get a notification when a product drops to its minimum or runs out'}
+                </span>
+              </span>
+              {(alerts === 'on' || alerts === 'off') && (
+                <button
+                  role="switch"
+                  aria-checked={alerts === 'on'}
+                  aria-label="Low stock alerts"
+                  onClick={toggleAlerts}
+                  disabled={alertsBusy}
+                  className={`relative w-12 h-7 shrink-0 rounded-full transition-colors disabled:opacity-50 ${alerts === 'on' ? 'bg-amber-500' : 'bg-slate-700'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-slate-100 transition-transform ${alerts === 'on' ? 'translate-x-5' : ''}`} />
+                </button>
+              )}
+            </div>
+            {alertsError && <p className="mt-2 text-sm text-rose-400">{alertsError}</p>}
+          </div>
+        </section>
 
         <section className="p-5 space-y-2">
           <p className="text-sm text-slate-500">A backup file is an extra copy you keep yourself, for example on a computer</p>

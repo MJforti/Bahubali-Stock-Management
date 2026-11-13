@@ -19,6 +19,7 @@ import { StorePicker } from './components/stores/StorePicker';
 import { ALL_STORES, STORES_CHANGED_EVENT, StoreScope, fetchStores, getSavedScope, saveScope, stockIn, stockMap } from './lib/stores';
 import { Layers, Warehouse, ChevronDown, RefreshCw, Loader2 } from 'lucide-react';
 import { BackupModal } from './components/settings/BackupModal';
+import { refreshAlerts } from './lib/alerts';
 
 import { MAIN_STORE_ID, Product, StockTransaction, Store, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
 import { fetchProducts, createProduct, updateProduct, normalizeProduct } from './services/productService';
@@ -235,6 +236,7 @@ export function App() {
   // Who is acting, for the activity log
   useEffect(() => {
     setActor(currentStaff, userRole);
+    refreshAlerts();
   }, [currentStaff, userRole]);
 
   // Activity log for the History page
