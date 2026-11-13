@@ -1,6 +1,7 @@
 // Sends low / out of stock alerts as phone notifications (web push).
 // Called by the database (trigger on stock_alerts) whenever an alert is
-// recorded, and by the app's "Send test alert" button.
+// recorded, by the daily 8 PM summary (cron), and by the app's
+// "Send test alert" button.
 import webpush from 'npm:web-push@3.6.7';
 import { createClient } from 'npm:@supabase/supabase-js@2.48.1';
 
@@ -46,6 +47,33 @@ function message(alerts: Alert[]) {
   };
 }
 
+interface Summary {
+  moves: number;
+  in_qty: number;
+  out_qty: number;
+  transfers: number;
+  out_count: number;
+  low_count: number;
+  reorder: string[];
+}
+
+function summaryMessage(d: Summary) {
+  const date = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+  const lines: string[] = [];
+  lines.push(
+    d.moves
+      ? `${d.moves} ${d.moves === 1 ? 'move' : 'moves'}: ${qty(d.in_qty)} in, ${qty(d.out_qty)} out${d.transfers ? ` · ${d.transfers} ${d.transfers === 1 ? 'transfer' : 'transfers'}` : ''}`
+      : `No stock in or out today${d.transfers ? ` · ${d.transfers} ${d.transfers === 1 ? 'transfer' : 'transfers'}` : ''}`
+  );
+  const need = d.out_count + d.low_count;
+  if (need) {
+    const parts = [d.out_count && `${d.out_count} out of stock`, d.low_count && `${d.low_count} low`].filter(Boolean).join(', ');
+    const more = need > d.reorder.length ? ` and ${need - d.reorder.length} more` : '';
+    lines.push(`${parts}: ${d.reorder.join(', ')}${more}`);
+  } else lines.push('Every product is above its minimum');
+  return { title: `Today's stock · ${date}`, body: lines.join('\n'), tag: 'daily-summary', url: '/' };
+}
+
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info' };
 
 Deno.serve(async (req) => {
@@ -68,6 +96,28 @@ Deno.serve(async (req) => {
         console.error('test push failed', err?.statusCode, err?.body ?? String(err));
         return Response.json({ ok: false, error: `The phone's push service refused it (${err?.statusCode ?? 'no reply'}). Turn alerts off and on again` }, { headers: cors });
       }
+    }
+
+    if (input?.summary) {
+      const { data: d, error: dErr } = await supabase.rpc('daily_stock_summary');
+      if (dErr) throw dErr;
+      const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').eq('daily_summary', true);
+      const payload = JSON.stringify(summaryMessage(d as Summary));
+      const gone: string[] = [];
+      let delivered = 0;
+      await Promise.all(
+        (subs ?? []).map((s) =>
+          webpush
+            .sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 60 * 60 * 12 })
+            .then(() => delivered++)
+            .catch((err: any) => {
+              if (err?.statusCode === 404 || err?.statusCode === 410) gone.push(s.endpoint);
+              else console.error('summary push failed', err?.statusCode, err?.body ?? String(err));
+            })
+        )
+      );
+      if (gone.length) await supabase.from('push_subscriptions').delete().in('endpoint', gone);
+      return Response.json({ summary: true, phones: subs?.length ?? 0, delivered });
     }
 
     const { data: alerts, error } = await supabase.rpc('claim_stock_alerts');

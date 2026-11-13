@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Download, Upload, Loader2, Cloud, Bell } from 'lucide-react';
-import { AlertsState, alertsState, sendTestAlert, turnAlertsOff, turnAlertsOn } from '../../lib/alerts';
+import { AlertsState, alertsState, dailySummaryOn, sendTestAlert, setDailySummary, turnAlertsOff, turnAlertsOn } from '../../lib/alerts';
 import { exportBackup, restoreBackup, notifyOtherTabs } from '../../lib/localDb';
 import { logActivity } from '../../lib/activity';
 import { resendEverything, SyncStatus } from '../../lib/sync';
@@ -33,6 +33,25 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, syncStatus, o
   const [alertsBusy, setAlertsBusy] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const [testNote, setTestNote] = useState<string | null>(null);
+  const [daily, setDaily] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (alerts === 'on') dailySummaryOn().then(setDaily, () => setDaily(null));
+  }, [alerts]);
+
+  const toggleDaily = async () => {
+    setAlertsBusy(true);
+    setAlertsError(null);
+    try {
+      await setDailySummary(!daily);
+      setDaily(!daily);
+      await logActivity(daily ? 'data.alerts_off' : 'data.alerts_on', `Turned ${daily ? 'off' : 'on'} the daily stock summary on this phone`);
+    } catch (err: any) {
+      setAlertsError(err?.message || 'Could not save');
+    } finally {
+      setAlertsBusy(false);
+    }
+  };
 
   const test = async () => {
     setAlertsBusy(true);
@@ -194,6 +213,24 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, syncStatus, o
                 </button>
               )}
             </div>
+            {alerts === 'on' && daily !== null && (
+              <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-3">
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[15px] text-slate-100">Daily summary at 8 PM</span>
+                  <span className="block text-sm text-slate-500">Today's stock in and out, and what needs restocking</span>
+                </span>
+                <button
+                  role="switch"
+                  aria-checked={daily}
+                  aria-label="Daily summary"
+                  onClick={toggleDaily}
+                  disabled={alertsBusy}
+                  className={`relative w-12 h-7 shrink-0 rounded-full transition-colors disabled:opacity-50 ${daily ? 'bg-amber-500' : 'bg-slate-700'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-slate-100 transition-transform ${daily ? 'translate-x-5' : ''}`} />
+                </button>
+              </div>
+            )}
             {alerts === 'on' && (
               <button onClick={test} disabled={alertsBusy} className="mt-3 h-9 px-3 rounded-lg border border-slate-700 text-sm text-slate-200 hover:bg-slate-850 transition-colors disabled:opacity-50">
                 Send test alert

@@ -79,3 +79,23 @@ export async function sendTestAlert(): Promise<void> {
   const { data, error } = await supabase.functions.invoke('send-stock-alerts', { body: { test: true, endpoint: sub.endpoint } });
   if (error || !data?.ok) throw new Error(data?.error || 'Could not send the test. Check the internet connection');
 }
+
+async function endpoint() {
+  const reg = await navigator.serviceWorker.getRegistration();
+  return (await reg?.pushManager.getSubscription())?.endpoint ?? null;
+}
+
+/** Whether this phone gets the 8 PM daily summary (null if unknown/offline). */
+export async function dailySummaryOn(): Promise<boolean | null> {
+  const ep = await endpoint();
+  if (!ep) return null;
+  const { data, error } = await supabase.rpc('daily_summary_setting', { endpoint_url: ep });
+  return error ? null : data !== false;
+}
+
+export async function setDailySummary(on: boolean): Promise<void> {
+  const ep = await endpoint();
+  if (!ep) throw new Error('Turn alerts on first');
+  const { error } = await supabase.rpc('set_daily_summary', { endpoint_url: ep, turn_on: on });
+  if (error) throw new Error('Could not save. Check the internet connection and try again');
+}
