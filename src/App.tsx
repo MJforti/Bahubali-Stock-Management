@@ -15,9 +15,12 @@ import { isUpdateReady, onUpdateReady, applyUpdate } from './pwa';
 import { NamePicker } from './components/auth/NamePicker';
 import { getCurrentStaff, setCurrentStaff, getRoster, STAFF_CHANGED_EVENT } from './lib/staffNames';
 import { setActor, logActivity, fetchActivity, ActivityEntry } from './lib/activity';
+import { StorePicker } from './components/stores/StorePicker';
+import { ALL_STORES, STORES_CHANGED_EVENT, StoreScope, fetchStores, getSavedScope, saveScope, stockIn, stockMap } from './lib/stores';
+import { Layers, Warehouse, ChevronDown } from 'lucide-react';
 import { BackupModal } from './components/settings/BackupModal';
 
-import { Product, StockTransaction, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
+import { MAIN_STORE_ID, Product, StockTransaction, Store, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
 import { fetchProducts, createProduct, updateProduct, normalizeProduct } from './services/productService';
 import { fetchStockTransactions, recordStockMovement } from './services/stockService';
 import { exportInventoryToExcel } from './services/excelService';
@@ -67,6 +70,46 @@ export function App() {
 
   // Single Authoritative Products & Transactions State
   const [products, setProducts] = useState<Product[]>([]);
+
+  // Stores: which one this phone is looking at, and the last one stock was moved in
+  const [stores, setStores] = useState<Store[]>([]);
+  const [scope, setScopeState] = useState<StoreScope>(() => getSavedScope());
+  const [storePickerOpen, setStorePickerOpen] = useState(false);
+  const [lastStore, setLastStore] = useState<string>(() => {
+    try {
+      return localStorage.getItem('bahubali_last_store') || MAIN_STORE_ID;
+    } catch {
+      return MAIN_STORE_ID;
+    }
+  });
+  const setScope = (next: StoreScope) => {
+    setScopeState(next);
+    saveScope(next);
+  };
+  const rememberStore = (id: string) => {
+    setLastStore(id);
+    try {
+      localStorage.setItem('bahubali_last_store', id);
+    } catch {
+      /* ignore */
+    }
+  };
+  const loadStores = useCallback(() => {
+    fetchStores().then(setStores).catch((err) => console.error('Could not load stores', err));
+  }, []);
+  useEffect(() => {
+    loadStores();
+    window.addEventListener(STORES_CHANGED_EVENT, loadStores);
+    return () => window.removeEventListener(STORES_CHANGED_EVENT, loadStores);
+  }, [loadStores]);
+  // If the store being viewed was removed (here or on another phone), show all stores
+  useEffect(() => {
+    if (scope !== ALL_STORES && stores.length && !stores.some((st) => st.id === scope && st.is_active)) setScope(ALL_STORES);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stores]);
+  /** Store new stock goes to: the one being viewed, or the last one used when viewing all */
+  const workingStore =
+    scope !== ALL_STORES ? scope : stores.some((st) => st.id === lastStore && st.is_active) ? lastStore : MAIN_STORE_ID;
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -233,24 +276,24 @@ export function App() {
     setStockModal({ open: true, type: 'OUT', product });
   };
 
+  const staffName = () => currentStaff || (userRole === 'admin' ? 'Admin' : 'Staff');
+
+  const applyMovementResult = (res: { product: Product; transaction: StockTransaction }, storeId: string) => {
+    if (storeId !== MAIN_STORE_ID || scope === ALL_STORES) rememberStore(storeId);
+    setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
+    setTransactions((prev) => [res.transaction, ...prev.filter((t) => t.id !== res.transaction.id)]);
+  };
+
   const handleStockConfirm = async (params: {
     product: Product;
     type: TransactionType;
     quantity: number;
     reason?: string;
     reference?: string;
+    storeId: string;
   }) => {
-    const res = await recordStockMovement({
-      product: params.product,
-      type: params.type,
-      quantity: params.quantity,
-      reason: params.reason,
-      reference: params.reference,
-      userName: currentStaff || (userRole === 'admin' ? 'Admin' : 'Staff')
-    });
-
-    setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
-    setTransactions((prev) => [res.transaction, ...prev.filter((t) => t.id !== res.transaction.id)]);
+    const res = await recordStockMovement({ ...params, userName: staffName() });
+    applyMovementResult(res, params.storeId);
   };
 
   const handleStockAdjustmentConfirm = async (params: {
@@ -258,27 +301,25 @@ export function App() {
     type: 'ADJUSTMENT';
     quantity: number;
     reason: string;
+    storeId: string;
   }) => {
-    const res = await recordStockMovement({
-      product: params.product,
-      type: 'ADJUSTMENT',
-      quantity: params.quantity,
-      reason: params.reason,
-      userName: currentStaff || 'Admin'
-    });
-
-    setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
-    setTransactions((prev) => [res.transaction, ...prev.filter((t) => t.id !== res.transaction.id)]);
+    const res = await recordStockMovement({ ...params, userName: staffName() });
+    applyMovementResult(res, params.storeId);
   };
 
   /**
    * Product edits must never overwrite stock directly: another device may have
    * moved stock since this form was opened, and every stock change needs a
-   * history row. A changed stock value is applied as an ADJUSTMENT instead.
+   * history row. A changed stock value is applied as a count correction in the
+   * store being viewed.
    */
   const applyProductEdit = async (id: string, updates: Partial<Product>, reason: string) => {
     const { current_stock: requestedStock, ...fieldUpdates } = updates;
     let latest = productsRef.current.find((p) => p.id === id);
+    const stockChanged = latest && requestedStock !== undefined && Number(requestedStock) !== stockIn(latest, scope);
+    if (stockChanged && scope === ALL_STORES) {
+      throw new Error('Pick a store at the top first, so the app knows which store\'s stock to change');
+    }
 
     if (Object.keys(fieldUpdates).length > 0) {
       latest = await updateProduct(id, fieldUpdates);
@@ -286,31 +327,22 @@ export function App() {
       setProducts((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
     }
 
-    if (
-      latest &&
-      requestedStock !== undefined &&
-      Number(requestedStock) !== Number(latest.current_stock)
-    ) {
-      await handleStockAdjustmentConfirm({
-        product: latest,
-        type: 'ADJUSTMENT',
-        quantity: Number(requestedStock),
-        reason
-      });
+    if (latest && stockChanged) {
+      await handleStockAdjustmentConfirm({ product: latest, type: 'ADJUSTMENT', quantity: Number(requestedStock), reason, storeId: scope });
     }
   };
 
-  const handleSaveProduct = async (productData: Partial<Product>) => {
+  const handleSaveProduct = async (productData: Partial<Product>, opts: { storeId?: string } = {}) => {
     if (productForm.product?.id) {
       const original = productForm.product;
       const updates = { ...productData };
       // Only treat stock as edited if the user actually changed the number in the form
-      if (Number(updates.current_stock) === Number(original.current_stock)) {
+      if (Number(updates.current_stock) === stockIn(original, scope)) {
         delete updates.current_stock;
       }
       await applyProductEdit(original.id, updates, 'Stock corrected via product edit form');
     } else {
-      const created = await createProduct(productData as any);
+      const created = await createProduct(productData as any, { storeId: opts.storeId || workingStore });
       setProducts((prev) => (prev.some((p) => p.id === created.id) ? prev : [created, ...prev]));
     }
   };
@@ -318,7 +350,7 @@ export function App() {
   const handleUpdateProductCell = async (id: string, updates: Partial<Product>) => {
     const original = productsRef.current.find((p) => p.id === id);
     const cellUpdates = { ...updates };
-    if (original && Number(cellUpdates.current_stock) === Number(original.current_stock)) {
+    if (original && Number(cellUpdates.current_stock) === stockIn(original, scope)) {
       delete cellUpdates.current_stock;
     }
     await applyProductEdit(id, cellUpdates, 'Stock corrected via inventory data sheet');
@@ -327,7 +359,8 @@ export function App() {
   const handleConfirmExcelImport = async (importedProducts: Partial<Product>[]) => {
     const names: string[] = [];
     for (const prodData of importedProducts) {
-      const created = await createProduct(prodData as any, { silent: true });
+      const openingByStore = prodData.opening_by_store && Object.keys(prodData.opening_by_store).length ? prodData.opening_by_store : undefined;
+      const created = await createProduct(prodData as any, { silent: true, storeId: workingStore, openingByStore });
       names.push(created.name);
       setProducts((prev) => (prev.some((p) => p.id === created.id) ? prev : [created, ...prev]));
     }
@@ -337,6 +370,18 @@ export function App() {
       });
     }
   };
+
+  // ---------- Store scoping ----------
+  const activeStores = stores.filter((st) => st.is_active);
+  const storeName = (id: string) => stores.find((st) => st.id === id)?.name || 'Store';
+  const scopeLabel = scope === ALL_STORES ? 'All stores' : storeName(scope);
+  /** Products this view should show, with current_stock set to the selected store's stock */
+  const scopedProducts =
+    scope === ALL_STORES
+      ? products
+      : products.filter((p) => scope in stockMap(p)).map((p) => ({ ...p, current_stock: stockIn(p, scope) }));
+  const scopedTransactions =
+    scope === ALL_STORES ? transactions : transactions.filter((t) => (t.store_id || MAIN_STORE_ID) === scope);
 
   if (initialLoading) {
     return <SplashScreen statusMessage="Opening stock register" />;
@@ -364,6 +409,20 @@ export function App() {
         onOpenNamePicker={() => setNamePickerOpen(true)}
         onQuickSearchClick={() => setActiveTab('products')}
       />
+
+      <button
+        onClick={() => setStorePickerOpen(true)}
+        className="border-b border-slate-800 bg-slate-950 px-4 md:px-6 h-11 flex items-center gap-2.5 text-left hover:bg-slate-900 transition-colors"
+        aria-label={`Store: ${scopeLabel}. Change store`}
+      >
+        {scope === ALL_STORES ? <Layers className="w-4 h-4 text-slate-500" strokeWidth={1.5} /> : <Warehouse className="w-4 h-4 text-amber-400" strokeWidth={1.5} />}
+        <span className="text-sm text-slate-500">Store</span>
+        <span className="text-sm text-slate-100 truncate">{scopeLabel}</span>
+        <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" strokeWidth={1.5} />
+        {scope === ALL_STORES && activeStores.length > 1 && (
+          <span className="ml-auto text-xs text-slate-500 hidden sm:inline">Totals across {activeStores.length} stores</span>
+        )}
+      </button>
 
       {userRole === 'admin' && (
         <div className="border-b border-slate-800 bg-slate-950 px-4 md:px-6 h-9 flex items-center justify-between text-sm">
@@ -412,8 +471,9 @@ export function App() {
         
         {activeTab === 'dashboard' && (
           <DashboardView
-            products={products}
-            transactions={transactions}
+            products={scopedProducts}
+            transactions={scopedTransactions}
+            scopeLabel={scopeLabel}
             userRole={userRole}
             onOpenStockIn={(prod) => handleOpenStockIn(prod)}
             onOpenStockOut={(prod) => handleOpenStockOut(prod)}
@@ -425,7 +485,7 @@ export function App() {
 
         {activeTab === 'products' && (
           <ProductListView
-            products={products}
+            products={scopedProducts}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             userRole={userRole}
@@ -436,20 +496,24 @@ export function App() {
             onOpenEditProduct={(prod) => setProductForm({ open: true, product: prod })}
             onOpenImportModal={() => setImportModalOpen(true)}
             onExportExcel={() => {
-              exportInventoryToExcel(products);
-              logActivity('data.exported', `Exported ${products.filter((p) => p.is_active !== false).length} products to Excel`);
+              exportInventoryToExcel(products, { stores: activeStores, scope });
+              logActivity('data.exported', `Exported ${scopedProducts.filter((p) => p.is_active !== false).length} products to Excel (${scopeLabel})`);
             }}
           />
         )}
 
         {activeTab === 'history' && (
-          <StockHistoryView transactions={transactions} activity={activity} products={products} />
+          <StockHistoryView transactions={scopedTransactions} activity={activity} products={products} stores={stores} scopeLabel={scopeLabel} />
         )}
 
         {activeTab === 'datasheet' && (
           <InventoryDataSheet
-            products={products}
+            products={scopedProducts}
             userRole={userRole}
+            scopeLabel={scopeLabel}
+            canEditStock={scope !== ALL_STORES}
+            onOpenImport={() => setImportModalOpen(true)}
+            stores={stores}
             onUpdateProduct={handleUpdateProductCell}
             onSelectProduct={(prod) => setSelectedProductForDetail(prod)}
             onOpenAddProduct={() => setProductForm({ open: true, product: null })}
@@ -472,7 +536,9 @@ export function App() {
       {/* Product Details Modal */}
       {selectedProductForDetail && (
         <ProductDetailModal
-          product={selectedProductForDetail}
+          product={products.find((x) => x.id === selectedProductForDetail.id) || selectedProductForDetail}
+          stores={stores}
+          scope={scope}
           userRole={userRole}
           transactions={transactions}
           onClose={() => setSelectedProductForDetail(null)}
@@ -488,8 +554,10 @@ export function App() {
       {stockModal.open && (
         <StockMovementModal
           initialType={stockModal.type}
-          initialProduct={stockModal.product}
+          initialProduct={stockModal.product ? products.find((x) => x.id === stockModal.product!.id) || stockModal.product : null}
           products={products}
+          stores={stores}
+          defaultStoreId={workingStore}
           onClose={() => setStockModal({ open: false, type: 'IN', product: null })}
           onConfirm={handleStockConfirm}
         />
@@ -498,7 +566,9 @@ export function App() {
       {/* Admin Stock Adjustment Modal */}
       {adjustmentProduct && (
         <StockAdjustmentModal
-          product={adjustmentProduct}
+          product={products.find((x) => x.id === adjustmentProduct.id) || adjustmentProduct}
+          stores={stores}
+          defaultStoreId={workingStore}
           onClose={() => setAdjustmentProduct(null)}
           onConfirm={handleStockAdjustmentConfirm}
         />
@@ -507,7 +577,18 @@ export function App() {
       {/* Add / Edit Product Form Modal */}
       {productForm.open && (
         <ProductFormModal
-          product={productForm.product}
+          product={
+            productForm.product
+              ? (() => {
+                  const p = products.find((x) => x.id === productForm.product!.id) || productForm.product!;
+                  return { ...p, current_stock: stockIn(p, scope) };
+                })()
+              : null
+          }
+          stores={stores}
+          defaultStoreId={workingStore}
+          scopeLabel={scopeLabel}
+          canEditStock={scope !== ALL_STORES}
           onClose={() => setProductForm({ open: false, product: null })}
           onSave={handleSaveProduct}
         />
@@ -517,8 +598,24 @@ export function App() {
       {importModalOpen && (
         <ExcelImportModal
           existingProducts={products}
+          stores={stores}
+          defaultStoreId={workingStore}
           onClose={() => setImportModalOpen(false)}
           onImportConfirmed={handleConfirmExcelImport}
+        />
+      )}
+
+      {storePickerOpen && (
+        <StorePicker
+          stores={stores}
+          products={products}
+          scope={scope}
+          isAdmin={userRole === 'admin'}
+          onPick={(next) => {
+            setScope(next);
+            setStorePickerOpen(false);
+          }}
+          onClose={() => setStorePickerOpen(false)}
         />
       )}
 

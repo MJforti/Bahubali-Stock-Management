@@ -1,6 +1,8 @@
 import { StockTransaction, TransactionType, Product } from '../types/inventory';
 import { OUTBOX, queueInTx, PRODUCTS, TRANSACTIONS, getAll, withTransaction, newId, notifyOtherTabs } from '../lib/localDb';
 import { normalizeProduct } from './productService';
+import { stockMap, totalOf } from '../lib/stores';
+import { MAIN_STORE_ID } from '../types/inventory';
 
 function withProductInfo(t: StockTransaction, prod?: Product): StockTransaction {
   return {
@@ -34,7 +36,10 @@ export async function recordStockMovement(params: {
   reason?: string;
   reference?: string;
   userName: string;
+  /** Store the movement happens in (defaults to Main Store) */
+  storeId?: string;
 }): Promise<{ product: Product; transaction: StockTransaction }> {
+  const storeId = params.storeId || MAIN_STORE_ID;
   const { reason, reference, userName } = params;
   const type = params.type.toUpperCase().trim() as TransactionType;
   const qty = Number(params.quantity);
@@ -53,7 +58,8 @@ export async function recordStockMovement(params: {
     const stored = await get<Product>(PRODUCTS, params.product.id);
     if (!stored) throw new Error('Product not found.');
     const product = normalizeProduct(stored);
-    const oldStock = product.current_stock;
+    const byStore = stockMap(product);
+    const oldStock = byStore[storeId] ?? 0;
 
     let newStock: number;
     let txQty: number;
@@ -62,7 +68,7 @@ export async function recordStockMovement(params: {
       txQty = qty;
     } else if (type === 'OUT') {
       if (qty > oldStock) {
-        throw new Error(`Cannot issue ${qty} ${product.unit}(s). Current stock is only ${oldStock} ${product.unit}(s).`);
+        throw new Error(`Cannot issue ${qty} ${product.unit}. This store has only ${oldStock} ${product.unit}`);
       }
       newStock = oldStock - qty;
       txQty = qty;
@@ -72,10 +78,18 @@ export async function recordStockMovement(params: {
     }
 
     const now = new Date().toISOString();
-    const updated: Product = { ...product, current_stock: newStock, updated_at: now, updated_by: userName };
+    const nextByStore = { ...byStore, [storeId]: newStock };
+    const updated: Product = {
+      ...product,
+      stock_by_store: nextByStore,
+      current_stock: totalOf(nextByStore),
+      updated_at: now,
+      updated_by: userName
+    };
     const transaction: StockTransaction = {
       id: newId(),
       product_id: product.id,
+      store_id: storeId,
       type,
       quantity: txQty,
       previous_stock: oldStock,

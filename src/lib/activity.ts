@@ -25,7 +25,10 @@ export type ActivityAction =
   | 'data.received'
   | 'data.backup'
   | 'data.restored'
-  | 'data.exported';
+  | 'data.exported'
+  | 'data.store_added'
+  | 'data.store_renamed'
+  | 'data.store_removed';
 
 export interface FieldChange {
   field: string;

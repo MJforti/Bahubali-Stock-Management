@@ -1,13 +1,18 @@
 import React, { useState, useRef } from 'react';
 import { X, Camera, Image as ImageIcon, Upload, Loader2, Check } from 'lucide-react';
-import { Product, UnitType } from '../../types/inventory';
+import { Product, Store, UnitType } from '../../types/inventory';
 import { uploadProductImage } from '../../services/imageService';
 import { INITIAL_BRANDS, INITIAL_CATEGORIES } from '../../data/seedData';
 
 interface ProductFormModalProps {
   product?: Product | null;
+  stores: Store[];
+  defaultStoreId: string;
+  scopeLabel: string;
+  /** Editing stock needs one store selected (All stores shows totals) */
+  canEditStock: boolean;
   onClose: () => void;
-  onSave: (productData: Partial<Product>) => Promise<void>;
+  onSave: (productData: Partial<Product>, opts?: { storeId?: string }) => Promise<void>;
 }
 
 const UNIT_OPTIONS: UnitType[] = [
@@ -16,10 +21,16 @@ const UNIT_OPTIONS: UnitType[] = [
 
 export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   product,
+  stores,
+  defaultStoreId,
+  scopeLabel,
+  canEditStock,
   onClose,
   onSave
 }) => {
   const isEditing = Boolean(product?.id);
+  const activeStores = stores.filter((st) => st.is_active);
+  const [storeId, setStoreId] = useState(defaultStoreId);
 
   const [name, setName] = useState(product?.name || '');
   const [brand, setBrand] = useState(product?.brand || 'Bosch');
@@ -84,7 +95,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         finalImageUrl = await uploadProductImage(imageFile, finalSku);
       }
 
-      await onSave({
+      await onSave(
+        {
         name: name.trim(),
         brand,
         category,
@@ -101,7 +113,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         rack: rack.trim().toUpperCase(),
         image_url: finalImageUrl,
         is_active: true
-      });
+        },
+        { storeId }
+      );
 
       onClose();
     } catch (err: any) {
@@ -308,17 +322,36 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 </select>
               </div>
 
-              {/* Initial Stock */}
+              {/* Stock: opening stock for a new product, or this store's stock when editing */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-300">Opening stock</label>
+                <label className="text-xs font-medium text-slate-300">
+                  {isEditing ? (canEditStock ? `Stock in ${scopeLabel}` : 'Stock (all stores)') : 'Opening stock'}
+                </label>
                 <input
                   type="number"
                   min="0"
                   value={currentStock}
+                  disabled={isEditing && !canEditStock}
                   onChange={(e) => setCurrentStock(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-emerald-400 font-medium focus:outline-none focus:border-slate-600"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-100 font-medium focus:outline-none focus:border-slate-600 disabled:opacity-60"
                 />
+                {isEditing && !canEditStock && <p className="text-xs text-slate-500">Pick one store at the top to change its stock</p>}
               </div>
+
+              {!isEditing && activeStores.length > 1 && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-300">Opening stock goes to</label>
+                  <select
+                    value={storeId}
+                    onChange={(e) => setStoreId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-base sm:text-sm text-slate-100 focus:outline-none focus:border-slate-600"
+                  >
+                    {activeStores.map((st) => (
+                      <option key={st.id} value={st.id}>{st.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Minimum Stock Level */}
               <div className="space-y-1">

@@ -16,7 +16,8 @@ import { ArrowDownToLine, ArrowUpFromLine,
 } from 'lucide-react';
 import { ProductPhoto } from '../ui/ProductThumb';
 import { formatPrice } from '../ui/stock';
-import { Product, StockTransaction, UserRole } from '../../types/inventory';
+import { ALL_STORES, StoreScope, stockIn, stockMap } from '../../lib/stores';
+import { MAIN_STORE_ID, Product, StockTransaction, Store, UserRole } from '../../types/inventory';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -28,10 +29,14 @@ interface ProductDetailModalProps {
   onOpenAdjustment: (product: Product) => void;
   onOpenEditProduct: (product: Product) => void;
   onRemoveProduct: (product: Product) => Promise<void>;
+  stores: Store[];
+  scope: StoreScope;
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   product,
+  stores,
+  scope,
   transactions,
   userRole,
   onClose,
@@ -45,8 +50,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const productHistory = transactions.filter((t) => t.product_id === product.id);
 
-  const isLow = product.current_stock > 0 && product.current_stock <= product.minimum_stock;
-  const isOut = product.current_stock <= 0;
+  const here = stockIn(product, scope);
+  const isLow = here > 0 && here <= product.minimum_stock;
+  const isOut = here <= 0;
+  const activeStores = stores.filter((st) => st.is_active);
+  const perStore = stockMap(product);
+  const storeName = (id?: string) => stores.find((st) => st.id === (id || MAIN_STORE_ID))?.name || 'Main Store';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 overflow-y-auto">
@@ -108,10 +117,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <span className={`text-[32px] leading-none font-semibold ${
                     isOut ? 'text-rose-400' : isLow ? 'text-amber-400' : 'text-slate-100'
                   }`}>
-                    {product.current_stock}
+                    {here}
                   </span>
                   <span className="text-base text-slate-400">{product.unit}</span>
                 </div>
+                {activeStores.length > 1 && (
+                  <p className="mt-1 text-xs text-slate-500">{scope === ALL_STORES ? 'All stores together' : `In ${storeName(scope)}`}</p>
+                )}
               </div>
 
               <div className="text-right">
@@ -152,6 +164,30 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
           </div>
 
+          {/* Stock in each store */}
+          {activeStores.length > 1 && (
+            <div className="rounded-xl border border-slate-800 bg-slate-950">
+              <p className="px-4 pt-3 pb-1 text-sm text-slate-400">Stock in each store</p>
+              <ul className="divide-y divide-slate-800 text-sm">
+                {activeStores.map((st) => {
+                  const qty = perStore[st.id];
+                  const carried = qty !== undefined;
+                  return (
+                    <li key={st.id} className={`flex items-center justify-between px-4 h-10 ${scope === st.id ? 'text-slate-100' : 'text-slate-300'}`}>
+                      <span className="flex items-center gap-2 truncate">
+                        {scope === st.id && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                        {st.name}
+                      </span>
+                      <span className={!carried ? 'text-slate-600' : qty <= 0 ? 'text-rose-400' : qty <= product.minimum_stock ? 'text-amber-400' : ''}>
+                        {carried ? `${qty} ${product.unit}` : 'Not stocked'}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
           {/* Details */}
           <dl className="rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800 text-sm">
             {[
@@ -185,7 +221,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     }`}>
                       {tx.type === 'IN' ? '+' : tx.type === 'OUT' ? '−' : 'Set to '}{tx.type === 'ADJUSTMENT' ? tx.new_stock : tx.quantity} {product.unit}
                     </span>
-                    <span className="text-slate-500 text-xs ml-2">by {tx.user_name}</span>
+                    <span className="text-slate-500 text-xs ml-2">
+                      {activeStores.length > 1 ? `${storeName(tx.store_id)} · ` : ''}by {tx.user_name}
+                    </span>
                   </div>
                   <span className="text-xs text-slate-500">
                     {new Date(tx.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}

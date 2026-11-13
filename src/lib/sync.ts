@@ -10,12 +10,14 @@
  *   stores them locally. Live updates from Supabase trigger a pull.
  */
 import { createClient, RealtimeChannel } from '@supabase/supabase-js';
-import { Product, StockTransaction } from '../types/inventory';
+import { MAIN_STORE_ID, Product, StockTransaction, Store } from '../types/inventory';
+import { putStoresFromCloud } from './stores';
 import {
   ACTIVITY,
   OUTBOX,
   OutboxOp,
   PRODUCTS,
+  STORES,
   TRANSACTIONS,
   getMeta,
   notifyOtherTabs,
@@ -80,6 +82,11 @@ function productToCloud(p: Product) {
     description: p.description,
     unit: p.unit,
     opening_stock: p.opening_stock ?? p.current_stock,
+    // Products from before stores existed: their opening stock is in Main Store
+    opening_by_store:
+      p.opening_by_store && Object.keys(p.opening_by_store).length
+        ? p.opening_by_store
+        : { [MAIN_STORE_ID]: Number(p.opening_stock ?? p.current_stock) || 0 },
     minimum_stock: p.minimum_stock,
     reorder_level: p.reorder_level,
     maximum_stock: p.maximum_stock ?? null,
@@ -112,6 +119,8 @@ function productFromCloud(r: any, local?: Product): Product {
     unit: r.unit,
     current_stock: num(r.current_stock),
     opening_stock: num(r.opening_stock),
+    opening_by_store: r.opening_by_store || {},
+    stock_by_store: Object.fromEntries(Object.entries(r.stock_by_store || {}).map(([k, v]) => [k, Number(v) || 0])),
     minimum_stock: num(r.minimum_stock),
     reorder_level: num(r.reorder_level),
     maximum_stock: r.maximum_stock === null ? undefined : num(r.maximum_stock),
@@ -135,6 +144,7 @@ function productFromCloud(r: any, local?: Product): Product {
 const movementToCloud = (t: StockTransaction) => ({
   id: t.id,
   product_id: t.product_id,
+  store_id: t.store_id || MAIN_STORE_ID,
   product_name: t.product_name || '',
   movement: t.type,
   quantity: Number(t.quantity) || 0,
@@ -149,6 +159,7 @@ const movementToCloud = (t: StockTransaction) => ({
 const movementFromCloud = (r: any): StockTransaction => ({
   id: r.id,
   product_id: r.product_id,
+  store_id: r.store_id,
   product_name: r.product_name,
   type: r.movement,
   quantity: Number(r.quantity),
@@ -264,12 +275,14 @@ async function push() {
   const movementIds = new Set<string>();
   const activityIds = new Set<string>();
   const staffNames = new Set<string>();
+  const storeIds = new Set<string>();
   for (const op of ops) {
     // An id the central database can't accept would block the queue forever: skip it
     if (op.kind !== 'staff' && !UUID.test(op.id)) continue;
     if (op.kind === 'product') productIds.add(op.id);
     else if (op.kind === 'movement') movementIds.add(op.id);
     else if (op.kind === 'activity') activityIds.add(op.id);
+    else if (op.kind === 'store') storeIds.add(op.id);
     else staffNames.add(op.name.toLowerCase());
   }
 
@@ -277,6 +290,7 @@ async function push() {
   const movements = (await Promise.all([...movementIds].map((id) => get<StockTransaction>(TRANSACTIONS, id)))).filter(Boolean) as StockTransaction[];
   const activity = (await Promise.all([...activityIds].map((id) => get<ActivityEntry>(ACTIVITY, id)))).filter(Boolean) as ActivityEntry[];
   const staff = getRoster().filter((e) => staffNames.has(e.n.toLowerCase()));
+  const stores = (await Promise.all([...storeIds].map((id) => get<Store>(STORES, id)))).filter(Boolean) as Store[];
 
 
   const productRows = [];
@@ -286,6 +300,8 @@ async function push() {
     productRows.push(productToCloud({ ...p, image_url: photo }));
   }
 
+  // Stores first, so movements and openings can refer to them
+  if (stores.length) await rpc('sync_stores', stores);
   if (productRows.length) await rpc('sync_products', productRows);
   if (movements.length) await rpc('sync_movements', movements.map(movementToCloud));
   if (activity.length) await rpc('sync_activity', activity.map(activityToCloud));
@@ -300,7 +316,7 @@ async function push() {
 
 // ---------- Pull ----------
 
-const TABLES = ['products', 'stock_movements', 'activity_log', 'staff'] as const;
+const TABLES = ['stores', 'products', 'stock_movements', 'activity_log', 'staff'] as const;
 
 async function pull(): Promise<boolean> {
   let changed = false;
@@ -322,6 +338,12 @@ async function pull(): Promise<boolean> {
 }
 
 async function applyRows(table: (typeof TABLES)[number], rows: any[]) {
+  if (table === 'stores') {
+    await putStoresFromCloud(
+      rows.map((r) => ({ id: r.id, name: r.name, is_active: r.is_active, sort_order: r.sort_order, changed_at: r.changed_at }))
+    );
+    return;
+  }
   if (table === 'staff') {
     mergeRoster(rows.map(staffFromCloud), false);
     return;

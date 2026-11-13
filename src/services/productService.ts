@@ -1,4 +1,4 @@
-import { Product, RealtimeStatus } from '../types/inventory';
+import { MAIN_STORE_ID, Product, RealtimeStatus } from '../types/inventory';
 import { diffProduct, logActivity } from '../lib/activity';
 import { queueInTx, OUTBOX, PRODUCTS, getAll, withTransaction, assertSkuFree, newId, notifyOtherTabs } from '../lib/localDb';
 
@@ -23,16 +23,22 @@ export async function fetchProducts(): Promise<{ products: Product[]; realtimeSt
 
 export async function createProduct(
   productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>,
-  opts: { silent?: boolean } = {}
+  opts: { silent?: boolean; storeId?: string; openingByStore?: Record<string, number> } = {}
 ): Promise<Product> {
   const now = new Date().toISOString();
+  // Opening stock goes to the chosen store (or several stores, from an Excel import)
+  const openings = opts.openingByStore ?? { [opts.storeId || MAIN_STORE_ID]: Number(productData.current_stock) || 0 };
+  const total = Object.values(openings).reduce((a, b) => a + (Number(b) || 0), 0);
   const product = normalizeProduct({
     ...productData,
     id: newId(),
     created_at: now,
     updated_at: now,
     details_updated_at: now,
-    opening_stock: Number(productData.current_stock) || 0
+    current_stock: total,
+    opening_stock: total,
+    opening_by_store: openings,
+    stock_by_store: { ...openings }
   });
   if (!product.name?.trim()) throw new Error('Product name is required.');
   if (!product.sku?.trim()) throw new Error('SKU is required.');

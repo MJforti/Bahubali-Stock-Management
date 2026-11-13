@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { X, Search, PlusCircle, MinusCircle, Package, AlertTriangle, Check, Loader2 } from 'lucide-react';
 import { ProductThumb } from '../ui/ProductThumb';
-import { Product, TransactionType } from '../../types/inventory';
+import { Product, Store, TransactionType } from '../../types/inventory';
+import { stockIn } from '../../lib/stores';
 
 interface StockMovementModalProps {
   initialType?: TransactionType;
   initialProduct?: Product | null;
   products: Product[];
+  stores: Store[];
+  defaultStoreId: string;
   onClose: () => void;
   onConfirm: (params: {
     product: Product;
@@ -14,6 +17,7 @@ interface StockMovementModalProps {
     quantity: number;
     reason?: string;
     reference?: string;
+    storeId: string;
   }) => Promise<void>;
 }
 
@@ -21,9 +25,14 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
   initialType = 'IN',
   initialProduct = null,
   products,
+  stores,
+  defaultStoreId,
   onClose,
   onConfirm
 }) => {
+  const activeStores = stores.filter((st) => st.is_active);
+  const [storeId, setStoreId] = useState<string>(defaultStoreId);
+  const here = (p: Product) => stockIn(p, storeId);
   const [type, setType] = useState<TransactionType>(initialType === 'ADJUSTMENT' ? 'IN' : initialType);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(initialProduct);
   const [searchQuery, setSearchQuery] = useState('');
@@ -69,8 +78,8 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
     }
 
     // Negative stock check
-    if (type === 'OUT' && selectedProduct.current_stock < quantity) {
-      setError(`Cannot issue ${quantity} ${selectedProduct.unit}(s). Only ${selectedProduct.current_stock} in stock!`);
+    if (type === 'OUT' && here(selectedProduct) < quantity) {
+      setError(`Cannot issue ${quantity} ${selectedProduct.unit}. This store has only ${here(selectedProduct)}`);
       return;
     }
 
@@ -79,6 +88,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
 
     try {
       await onConfirm({
+        storeId,
         product: selectedProduct,
         type,
         quantity,
@@ -93,7 +103,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
     }
   };
 
-  const currentStockNum = Number(selectedProduct?.current_stock) || 0;
+  const currentStockNum = selectedProduct ? here(selectedProduct) : 0;
   const qtyNum = Number(quantity) || 0;
 
   const newCalculatedStock = selectedProduct
@@ -143,6 +153,24 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+          {activeStores.length > 1 && (
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm text-slate-400">{type === 'IN' ? 'Into store' : 'From store'}</span>
+              <select
+                value={storeId}
+                onChange={(e) => {
+                  setStoreId(e.target.value);
+                  setError(null);
+                }}
+                aria-label="Store"
+                className="h-10 min-w-0 max-w-[60%] px-3 rounded-lg bg-slate-950 border border-slate-700 text-base sm:text-sm text-slate-100 focus:outline-none focus:border-slate-500"
+              >
+                {activeStores.map((st) => (
+                  <option key={st.id} value={st.id}>{st.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           
           {error && (
             <div className="p-3 bg-rose-950 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-medium flex items-center gap-2">
@@ -183,7 +211,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
                       <p className="text-xs text-slate-400">{item.brand}{item.rack ? ` · ${item.rack}` : ''}</p>
                     </div>
                     <span className="text-xs font-semibold text-slate-100">
-                      {item.current_stock} {item.unit}
+                      {here(item)} {item.unit}
                     </span>
                   </div>
                 ))}
@@ -201,7 +229,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
                     <span className="text-xs  text-slate-400">{selectedProduct.brand}</span>
                     <h3 className="text-sm font-medium text-slate-100 truncate">{selectedProduct.name}</h3>
                     <p className="text-xs font-medium text-slate-400 mt-0.5">
-                      In stock: <span className="font-semibold text-slate-100">{selectedProduct.current_stock} {selectedProduct.unit}</span>
+                      In stock here: <span className="font-semibold text-slate-100">{currentStockNum} {selectedProduct.unit}</span>
                       {selectedProduct.rack ? ` • Rack ${selectedProduct.rack}` : ''}
                     </p>
                   </div>
@@ -273,7 +301,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
                   <span className={`font-semibold text-sm ${
                     newCalculatedStock < 0 ? 'text-rose-400' : 'text-emerald-400'
                   }`}>
-                    {selectedProduct.current_stock} → {newCalculatedStock} {selectedProduct.unit}
+                    {currentStockNum} → {newCalculatedStock} {selectedProduct.unit}
                   </span>
                 </div>
               </div>

@@ -6,15 +6,16 @@
  * central Supabase database by lib/sync.ts whenever the phone is online.
  * Other open tabs on the same device are kept in sync with BroadcastChannel.
  */
-import { Product, StockTransaction } from '../types/inventory';
+import { MAIN_STORE_ID, Product, StockTransaction } from '../types/inventory';
 import { INITIAL_PRODUCTS } from '../data/seedData';
 
 const DB_NAME = 'bahubali_inventory';
-const DB_VERSION = 3; // 2: activity log, 3: outbox for cloud sync
+const DB_VERSION = 4; // 2: activity log, 3: outbox for cloud sync, 4: stores
 export const PRODUCTS = 'products';
 export const TRANSACTIONS = 'stock_transactions';
 export const ACTIVITY = 'activity';
 export const OUTBOX = 'outbox';
+export const STORES = 'stores';
 export const META = 'meta';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -54,6 +55,7 @@ export function openDb(): Promise<IDBDatabase> {
           s.createIndex('created_at', 'created_at');
         }
         if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
+        if (!db.objectStoreNames.contains(STORES)) db.createObjectStore(STORES, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(OUTBOX)) {
           db.createObjectStore(OUTBOX, { keyPath: 'seq', autoIncrement: true });
         }
@@ -76,11 +78,16 @@ export function openDb(): Promise<IDBDatabase> {
 }
 
 async function seedIfNeeded(db: IDBDatabase) {
-  const tx = db.transaction([PRODUCTS, META], 'readwrite');
+  const tx = db.transaction([PRODUCTS, STORES, META], 'readwrite');
   const seeded = await req(tx.objectStore(META).get('seeded'));
   if (!seeded) {
     INITIAL_PRODUCTS.forEach((p) => tx.objectStore(PRODUCTS).put(p));
     tx.objectStore(META).put(true, 'seeded');
+  }
+  // Every phone knows Main Store (same id everywhere) even before its first sync
+  const main = await req(tx.objectStore(STORES).get(MAIN_STORE_ID));
+  if (!main) {
+    tx.objectStore(STORES).put({ id: MAIN_STORE_ID, name: 'Main Store', is_active: true, sort_order: 0, changed_at: new Date(0).toISOString() });
   }
   await txDone(tx);
 }
@@ -142,6 +149,7 @@ export interface BackupFile {
   products: Product[];
   stock_transactions: StockTransaction[];
   activity?: unknown[];
+  stores?: unknown[];
 }
 
 export async function exportBackup(): Promise<BackupFile> {
@@ -151,7 +159,8 @@ export async function exportBackup(): Promise<BackupFile> {
     exported_at: new Date().toISOString(),
     products: await getAll<Product>(PRODUCTS),
     stock_transactions: await getAll<StockTransaction>(TRANSACTIONS),
-    activity: await getAll<unknown>(ACTIVITY)
+    activity: await getAll<unknown>(ACTIVITY),
+    stores: await getAll<unknown>(STORES)
   };
 }
 
@@ -159,12 +168,21 @@ export async function restoreBackup(data: BackupFile): Promise<void> {
   if (!data || data.app !== 'bahubali-stock-management' || !Array.isArray(data.products) || !Array.isArray(data.stock_transactions)) {
     throw new Error('This is not a valid Bahubali backup file.');
   }
-  await withTransaction([PRODUCTS, TRANSACTIONS, ACTIVITY, META], async (tx) => {
+  await withTransaction([PRODUCTS, TRANSACTIONS, ACTIVITY, STORES, OUTBOX, META], async (tx) => {
     tx.objectStore(PRODUCTS).clear();
     tx.objectStore(TRANSACTIONS).clear();
     data.products.forEach((p) => tx.objectStore(PRODUCTS).put(p));
     data.stock_transactions.forEach((t) => tx.objectStore(TRANSACTIONS).put(t));
     // Older backups have no activity log: keep this phone's log rather than wiping it
+    // Stores in the backup are added (and re-sent), never removed
+    if (Array.isArray(data.stores)) {
+      data.stores.forEach((st: any) => {
+        if (st && typeof st.id === 'string' && typeof st.name === 'string') {
+          tx.objectStore(STORES).put(st);
+          tx.objectStore(OUTBOX).add({ kind: 'store', id: st.id, queued_at: Date.now() });
+        }
+      });
+    }
     if (Array.isArray(data.activity)) {
       tx.objectStore(ACTIVITY).clear();
       data.activity.forEach((a: any) => a && typeof a.id === 'string' && tx.objectStore(ACTIVITY).put(a));
@@ -209,7 +227,8 @@ export type OutboxOp =
   | { kind: 'product'; id: string }
   | { kind: 'movement'; id: string }
   | { kind: 'activity'; id: string }
-  | { kind: 'staff'; name: string };
+  | { kind: 'staff'; name: string }
+  | { kind: 'store'; id: string };
 
 /** Queue a change inside an existing write transaction (so it can't be lost). */
 export function queueInTx(tx: IDBTransaction, op: OutboxOp) {

@@ -46,6 +46,10 @@ export interface Product {
   updated_by?: string;
   /** Stock when the product was first added; stock is replayed from here when phones merge */
   opening_stock?: number;
+  /** Opening stock per store id */
+  opening_by_store?: Record<string, number>;
+  /** Current stock per store id; current_stock is the total */
+  stock_by_store?: Record<string, number>;
   /** When name, price, rack etc. last changed (not stock). Newest wins when phones merge */
   details_updated_at?: string;
 }
@@ -53,6 +57,8 @@ export interface Product {
 export interface StockTransaction {
   id: string;
   product_id: string;
+  /** Store the movement happened in (older entries: Main Store) */
+  store_id?: string;
   type: TransactionType;
   quantity: number;
   previous_stock: number;
@@ -124,14 +130,30 @@ export interface ExcelColumnMapping {
   name: string;
   brand: string;
   category: string;
+  sub_category: string;
   sku: string;
-  stock: string;
   unit: string;
+  store: string;
+  stock: string;
   min_stock: string;
+  reorder_level: string;
   purchase_price: string;
   selling_price: string;
   supplier: string;
   rack: string;
+  description: string;
 }
 
 export type RealtimeStatus = 'connected' | 'reconnecting' | 'local_demo';
+
+/** A shop or godown. Removed stores stay (is_active false) so history keeps their name. */
+export interface Store {
+  id: string;
+  name: string;
+  is_active: boolean;
+  sort_order: number;
+  changed_at: string;
+}
+
+/** Same id on every phone and in the central database */
+export const MAIN_STORE_ID = '00000000-0000-4000-8000-000000000001';

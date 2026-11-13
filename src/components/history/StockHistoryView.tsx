@@ -17,17 +17,20 @@ import {
   FileDown,
   Download,
   Upload,
-  Package
+  Package,
+  Warehouse
 } from 'lucide-react';
 import { ProductThumb } from '../ui/ProductThumb';
 import { realReason, formatQty } from '../ui/stock';
-import { Product, StockTransaction } from '../../types/inventory';
+import { MAIN_STORE_ID, Product, StockTransaction, Store } from '../../types/inventory';
 import { ActivityAction, ActivityEntry, FieldChange } from '../../lib/activity';
 
 interface StockHistoryViewProps {
   transactions: StockTransaction[];
   activity: ActivityEntry[];
   products: Product[];
+  stores: Store[];
+  scopeLabel: string;
 }
 
 type Section = 'all' | 'stock' | 'product' | 'people' | 'data';
@@ -38,7 +41,7 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: 'stock', label: 'Stock' },
   { id: 'product', label: 'Products' },
   { id: 'people', label: 'People and access' },
-  { id: 'data', label: 'Sharing and backup' }
+  { id: 'data', label: 'Stores and backup' }
 ];
 
 const SECTION_HINT: Record<Section, string> = {
@@ -46,7 +49,7 @@ const SECTION_HINT: Record<Section, string> = {
   stock: 'Stock in, stock out and count corrections',
   product: 'Products added, edited, removed or imported',
   people: 'Staff list changes, who used the phone, and admin mode',
-  data: 'Stock sent to or received from other phones, backups and exports'
+  data: 'Stores, backups, imports and exports'
 };
 
 const ACTION_ICON: Record<ActivityAction, typeof Package> = {
@@ -66,7 +69,10 @@ const ACTION_ICON: Record<ActivityAction, typeof Package> = {
   'data.received': FileDown,
   'data.backup': Download,
   'data.restored': Upload,
-  'data.exported': FileSpreadsheet
+  'data.exported': FileSpreadsheet,
+  'data.store_added': Warehouse,
+  'data.store_renamed': Warehouse,
+  'data.store_removed': Warehouse
 };
 
 /** One row in the list, whether it came from a stock movement or the activity log. */
@@ -83,7 +89,9 @@ interface Row {
 
 const PAGE = 60;
 
-export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions, activity, products }) => {
+export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions, activity, products, stores, scopeLabel }) => {
+  const multiStore = stores.filter((st) => st.is_active).length > 1;
+  const storeName = (id?: string) => stores.find((st) => st.id === (id || MAIN_STORE_ID))?.name || 'Main Store';
   const [section, setSection] = useState<Section>('all');
   const [query, setQuery] = useState('');
   const [person, setPerson] = useState('ALL');
@@ -101,7 +109,7 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
         at: t.created_at,
         user: t.user_name || 'Staff',
         section: 'stock',
-        searchText: [p?.name, t.product_name, p?.brand, p?.sku, t.user_name, t.reason, t.reference].join(' ').toLowerCase(),
+        searchText: [p?.name, t.product_name, p?.brand, p?.sku, t.user_name, t.reason, t.reference, storeName(t.store_id)].join(' ').toLowerCase(),
         tx: t
       };
     });
@@ -117,7 +125,7 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
       entry: e
     }));
     return [...stockRows, ...activityRows].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-  }, [transactions, activity, productById]);
+  }, [transactions, activity, productById, stores]);
 
   const people = useMemo(() => Array.from(new Set(rows.map((r) => r.user))).sort((a, b) => a.localeCompare(b)), [rows]);
 
@@ -171,7 +179,7 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
     <div className="space-y-5">
       <div>
         <h1 className="text-[28px] leading-tight font-medium text-slate-100">History</h1>
-        <p className="mt-1 text-sm text-slate-500">Who did what, and when</p>
+        <p className="mt-1 text-sm text-slate-500">Who did what, and when · stock movements for {scopeLabel}</p>
       </div>
 
       {/* Sections */}
@@ -251,7 +259,7 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
               </h2>
               <ul className="rounded-2xl border border-slate-800 bg-slate-900 divide-y divide-slate-800">
                 {items.map((r) => (
-                  <li key={r.id}>{r.tx ? <StockRow tx={r.tx} product={productById.get(r.tx.product_id)} /> : <ActivityRow entry={r.entry!} product={r.entry?.product_id ? productById.get(r.entry.product_id) : undefined} />}</li>
+                  <li key={r.id}>{r.tx ? <StockRow tx={r.tx} product={productById.get(r.tx.product_id)} storeLabel={multiStore ? storeName(r.tx.store_id) : undefined} /> : <ActivityRow entry={r.entry!} product={r.entry?.product_id ? productById.get(r.entry.product_id) : undefined} />}</li>
                 ))}
               </ul>
             </section>
@@ -290,7 +298,7 @@ const Who: React.FC<{ user: string; role?: 'admin' | 'staff' }> = ({ user, role 
   </span>
 );
 
-const StockRow: React.FC<{ tx: StockTransaction; product?: Product }> = ({ tx, product }) => {
+const StockRow: React.FC<{ tx: StockTransaction; product?: Product; storeLabel?: string }> = ({ tx, product, storeLabel }) => {
   const isIn = tx.type === 'IN';
   const isOut = tx.type === 'OUT';
   const sign = isIn ? '+' : isOut ? '−' : '';
@@ -303,7 +311,7 @@ const StockRow: React.FC<{ tx: StockTransaction; product?: Product }> = ({ tx, p
       <div className="flex-1 min-w-0">
         <p className="text-[15px] text-slate-100 truncate">{name}</p>
         <p className="mt-0.5 text-sm text-slate-500 truncate">
-          {kind} · <Who user={tx.user_name || 'Staff'} />
+          {kind}{storeLabel ? ` · ${storeLabel}` : ''} · <Who user={tx.user_name || 'Staff'} />
           {realReason(tx.reason) ? ` · ${tx.reason}` : ''}
           {tx.reference ? ` · Ref ${tx.reference}` : ''}
         </p>

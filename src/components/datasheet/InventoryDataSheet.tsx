@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Search, Edit2, Check, X, Eye, Plus, Trash2 } from 'lucide-react';
+import { Search, Edit2, Check, X, Eye, Plus, Trash2, Upload, Download } from 'lucide-react';
+import { downloadSampleSheet } from '../../services/excelService';
 import { ProductThumb } from '../ui/ProductThumb';
 import { formatPrice } from '../ui/stock';
-import { Product, UserRole } from '../../types/inventory';
+import { Product, Store, UserRole } from '../../types/inventory';
 
 interface InventoryDataSheetProps {
   products: Product[];
@@ -11,6 +12,11 @@ interface InventoryDataSheetProps {
   onSelectProduct: (product: Product) => void;
   onOpenAddProduct: () => void;
   onRemoveProduct: (product: Product) => Promise<void>;
+  onOpenImport: () => void;
+  stores: Store[];
+  scopeLabel: string;
+  /** Stock can only be edited when one store is selected (All stores shows totals) */
+  canEditStock: boolean;
 }
 
 export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
@@ -19,7 +25,11 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
   onUpdateProduct,
   onSelectProduct,
   onOpenAddProduct,
-  onRemoveProduct
+  onRemoveProduct,
+  onOpenImport,
+  stores,
+  scopeLabel,
+  canEditStock
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -44,7 +54,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
     if (userRole !== 'admin') return;
     setEditingId(product.id);
     setEditForm({
-      current_stock: product.current_stock,
+      ...(canEditStock ? { current_stock: product.current_stock } : {}),
       minimum_stock: product.minimum_stock,
       selling_price: product.selling_price,
       purchase_price: product.purchase_price,
@@ -68,10 +78,10 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
         <div>
           <h1 className="text-[28px] leading-tight font-medium text-slate-100">Data sheet</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {userRole === 'admin' ? 'Edit stock, prices and racks right in the table' : 'All products in one table'}
+            {scopeLabel} · {userRole === 'admin' ? (canEditStock ? 'edit stock, prices and racks right in the table' : 'pick one store at the top to edit its stock here') : 'all products in one table'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="relative block">
             <span className="sr-only">Search</span>
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" strokeWidth={1.5} />
@@ -83,6 +93,26 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
               className="h-9 w-48 pl-9 pr-3 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-600"
             />
           </label>
+          {userRole === 'admin' && (
+            <>
+              <button
+                onClick={() => downloadSampleSheet(stores)}
+                title="Download a sample Excel sheet with the app's columns"
+                className="h-9 px-3 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-300 text-sm flex items-center gap-2 transition-colors"
+              >
+                <Download className="w-4 h-4 text-slate-500" strokeWidth={1.5} />
+                <span className="hidden lg:inline">Sample sheet</span>
+              </button>
+              <button
+                onClick={onOpenImport}
+                className="h-9 px-3 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-300 text-sm flex items-center gap-2 transition-colors"
+              >
+                <Upload className="w-4 h-4 text-slate-500" strokeWidth={1.5} />
+                <span className="hidden sm:inline">Import from Excel</span>
+                <span className="sm:hidden">Import</span>
+              </button>
+            </>
+          )}
           {userRole === 'admin' && (
             <button
               onClick={onOpenAddProduct}
@@ -147,9 +177,10 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
 
                     {/* Current Stock (Editable) */}
                     <td className="p-3 text-right">
-                      {isEditing ? (
+                      {isEditing && canEditStock ? (
                         <input
                           type="number"
+                          aria-label={`Stock in ${scopeLabel}`}
                           value={editForm.current_stock ?? p.current_stock}
                           onChange={(e) => setEditForm((f) => ({ ...f, current_stock: Number(e.target.value) }))}
                           className="w-20 px-2 py-1 bg-slate-950 border border-slate-600 rounded font-medium text-emerald-400 text-xs"

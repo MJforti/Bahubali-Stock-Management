@@ -1,30 +1,39 @@
 import React, { useState } from 'react';
 import { X, AlertTriangle, Check, Loader2, Package } from 'lucide-react';
 import { ProductThumb } from '../ui/ProductThumb';
-import { Product } from '../../types/inventory';
+import { Product, Store } from '../../types/inventory';
+import { stockIn } from '../../lib/stores';
 
 interface StockAdjustmentModalProps {
   product: Product;
+  stores: Store[];
+  defaultStoreId: string;
   onClose: () => void;
   onConfirm: (params: {
     product: Product;
     type: 'ADJUSTMENT';
     quantity: number;
     reason: string;
+    storeId: string;
   }) => Promise<void>;
 }
 
 export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   product,
+  stores,
+  defaultStoreId,
   onClose,
   onConfirm
 }) => {
-  const [physicalStock, setPhysicalStock] = useState<number>(product.current_stock);
+  const activeStores = stores.filter((st) => st.is_active);
+  const [storeId, setStoreId] = useState<string>(defaultStoreId);
+  const recorded = stockIn(product, storeId);
+  const [physicalStock, setPhysicalStock] = useState<number>(recorded);
   const [reason, setReason] = useState('Shelf count');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const stockDifference = physicalStock - product.current_stock;
+  const stockDifference = physicalStock - recorded;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +52,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
 
     try {
       await onConfirm({
+        storeId,
         product,
         type: 'ADJUSTMENT',
         quantity: physicalStock,
@@ -72,6 +82,25 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {activeStores.length > 1 && (
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm text-slate-400">Store counted</span>
+              <select
+                value={storeId}
+                onChange={(e) => {
+                  setStoreId(e.target.value);
+                  setPhysicalStock(stockIn(product, e.target.value));
+                  setError(null);
+                }}
+                aria-label="Store"
+                className="h-10 min-w-0 max-w-[60%] px-3 rounded-lg bg-slate-950 border border-slate-700 text-base sm:text-sm text-slate-100 focus:outline-none focus:border-slate-500"
+              >
+                {activeStores.map((st) => (
+                  <option key={st.id} value={st.id}>{st.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           
           {error && (
             <div className="p-3 bg-rose-950/90 border border-rose-500/50 rounded-xl text-rose-300 text-xs font-medium flex items-center gap-2">
@@ -87,7 +116,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
               <span className="text-xs  text-slate-400">{product.brand}</span>
               <h3 className="text-xs font-medium text-slate-100 truncate">{product.name}</h3>
               <p className="text-xs text-slate-400">
-                Recorded stock: <span className="font-medium text-slate-200">{product.current_stock} {product.unit}</span>
+                Recorded here: <span className="font-medium text-slate-200">{recorded} {product.unit}</span>
               </p>
             </div>
           </div>

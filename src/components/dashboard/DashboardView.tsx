@@ -8,6 +8,7 @@ interface DashboardViewProps {
   products: Product[];
   transactions: StockTransaction[];
   userRole: UserRole;
+  scopeLabel: string;
   onOpenStockIn: (product?: Product) => void;
   onOpenStockOut: (product?: Product) => void;
   onOpenAddProduct: () => void;
@@ -34,6 +35,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   products,
   transactions,
   userRole,
+  scopeLabel,
   onOpenStockIn,
   onOpenStockOut,
   onOpenAddProduct,
@@ -64,7 +66,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-[28px] leading-tight font-medium text-slate-100">Stock overview</h1>
-          <p className="mt-1 text-sm text-slate-500">{dateLabel}</p>
+          <p className="mt-1 text-sm text-slate-500">{dateLabel} · {scopeLabel}</p>
         </div>
         <button
           onClick={onGoToProductsSearch}
