@@ -75,8 +75,9 @@ CREATE OR REPLACE FUNCTION run_daily_summary() RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE today date := (now() AT TIME ZONE 'Asia/Kolkata')::date;
 BEGIN
-  INSERT INTO daily_summaries (day, data) VALUES (today, build_daily_summary(today))
-  ON CONFLICT (day) DO NOTHING;
+  -- A summary saved earlier today (e.g. a test) is replaced by the 8 PM one
+  DELETE FROM daily_summaries WHERE day = today;
+  INSERT INTO daily_summaries (day, data) VALUES (today, build_daily_summary(today));
 END $$;
 
 -- Push function: take today's summary if not yet sent (exactly once)
