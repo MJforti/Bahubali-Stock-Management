@@ -109,7 +109,7 @@ const DailyFlow: React.FC<{ transactions: StockTransaction[] }> = ({ transaction
       <div className="relative" onMouseLeave={() => setHover(null)}>
         {/* gridlines */}
         <div className="absolute left-0 right-0 top-0" style={{ height: H }}>
-          {[1, 0.5].map((f) => (
+          {(totalIn + totalOut ? [1, 0.5] : []).map((f) => (
             <div key={f} className="absolute left-8 right-0 border-t border-slate-800" style={{ top: H - H * f }}>
               <span className="absolute -left-8 -top-[7px] w-7 text-right text-[11px] tabular-nums text-slate-500">{formatQty(nice * f)}</span>
             </div>
@@ -138,7 +138,13 @@ const DailyFlow: React.FC<{ transactions: StockTransaction[] }> = ({ transaction
           <span>Today</span>
         </div>
 
-        {shown !== null && (
+        {totalIn + totalOut === 0 && (
+          <p className="absolute inset-x-0 top-0 ml-8 flex items-center justify-center text-sm text-slate-500" style={{ height: H }}>
+            No stock in or out in the last {DAYS} days
+          </p>
+        )}
+
+        {shown !== null && totalIn + totalOut > 0 && (
           <div
             className="pointer-events-none absolute -top-2 z-10 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs"
             style={{ left: `clamp(32px, calc(32px + (100% - 32px) * ${(shown + 0.5) / DAYS} - 60px), calc(100% - 120px))`, width: 120 }}

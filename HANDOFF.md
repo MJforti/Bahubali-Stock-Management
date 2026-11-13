@@ -226,6 +226,10 @@ The SQL files in `supabase/` have all been applied to the live project, in this 
 13. iPhone alerts re-register after app updates. Confirmed working on iPhone (test alert, low stock alert and summary).
 14. PDF stock report. Works on iPhone.
 15. Overview charts. Work on the owner's phone.
+18. Overview stat row reshaped:
+    - one wide lead card: units on shelves, with the product count and stock value at cost;
+    - four compact cards: low, out, received today, issued today;
+    - the chart shows "No stock in or out" instead of an empty grid.
 17. Third unslop pass (polish):
     - charts moved to amber and graphite;
     - tooltip no longer covers the axis;

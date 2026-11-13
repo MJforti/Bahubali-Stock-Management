@@ -30,10 +30,12 @@ const isToday = (iso: string) => {
 const Stat: React.FC<{ label: string; value: string; note: string; tone?: string }> = ({ label, value, note, tone = 'text-slate-100' }) => (
   <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
     <p className="text-sm text-slate-400">{label}</p>
-    <p className={`mt-2 text-[28px] leading-none font-semibold ${tone}`}>{value}</p>
+    <p className={`mt-2 text-2xl leading-none font-semibold tabular-nums ${tone}`}>{value}</p>
     <p className="mt-2 text-xs text-slate-500">{note}</p>
   </div>
 );
+
+const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   products,
@@ -52,6 +54,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const isAdmin = userRole === 'admin';
   const active = products.filter((p) => p.is_active !== false);
   const totalUnits = active.reduce((acc, p) => acc + (p.current_stock || 0), 0);
+  const stockValue = active.reduce((acc, p) => acc + Math.max(0, Number(p.current_stock) || 0) * (Number(p.purchase_price) || 0), 0);
   const low = active.filter((p) => stockState(p) === 'low');
   const out = active.filter((p) => stockState(p) === 'out');
   const reorder = [...out, ...low];
@@ -86,9 +89,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Figures */}
-      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <Stat label="Products" value={formatQty(active.length)} note="Active in the register" />
-        <Stat label="Units on shelves" value={formatQty(totalUnits)} note="Across all products" />
+      <section className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+        {/* Lead figure */}
+        <div className="col-span-2 md:col-span-4 xl:col-span-2 rounded-xl border border-slate-800 bg-slate-900 p-5 flex flex-col justify-between gap-4">
+          <p className="text-sm text-slate-400">Units on shelves</p>
+          <div className="flex items-end justify-between gap-4">
+            <p className="text-[40px] leading-none font-semibold tabular-nums text-slate-100">{formatQty(totalUnits)}</p>
+            <div className="text-right text-sm">
+              <p className="text-slate-200 tabular-nums">{formatQty(active.length)} products</p>
+              <p className="mt-0.5 text-slate-500 tabular-nums">{inr(stockValue)} at cost</p>
+            </div>
+          </div>
+        </div>
         <Stat label="Low stock" value={formatQty(low.length)} note="At or under minimum" tone={low.length ? 'text-amber-400' : undefined} />
         <Stat label="Out of stock" value={formatQty(out.length)} note="None left" tone={out.length ? 'text-rose-400' : undefined} />
         <Stat label="Received today" value={formatQty(unitsIn)} note={movesIn === 1 ? '1 stock in' : `${movesIn} stock ins`} />
