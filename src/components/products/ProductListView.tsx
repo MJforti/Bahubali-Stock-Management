@@ -37,12 +37,12 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
 
   // Categories & Brands list computation
   const categories = useMemo(() => {
-    const set = new Set(products.map((p) => p.category).filter(Boolean));
+    const set = new Set(products.filter((p) => p.is_active !== false).map((p) => p.category).filter(Boolean));
     return ['ALL', ...Array.from(set)];
   }, [products]);
 
   const brands = useMemo(() => {
-    const set = new Set(products.map((p) => p.brand).filter(Boolean));
+    const set = new Set(products.filter((p) => p.is_active !== false).map((p) => p.brand).filter(Boolean));
     return ['ALL', ...Array.from(set)];
   }, [products]);
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Edit2, Check, X, Eye, Plus } from 'lucide-react';
+import { Search, Edit2, Check, X, Eye, Plus, Trash2 } from 'lucide-react';
 import { ProductThumb } from '../ui/ProductThumb';
 import { formatPrice } from '../ui/stock';
 import { Product, UserRole } from '../../types/inventory';
@@ -10,6 +10,7 @@ interface InventoryDataSheetProps {
   onUpdateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
   onSelectProduct: (product: Product) => void;
   onOpenAddProduct: () => void;
+  onRemoveProduct: (product: Product) => Promise<void>;
 }
 
 export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
@@ -17,7 +18,8 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
   userRole,
   onUpdateProduct,
   onSelectProduct,
-  onOpenAddProduct
+  onOpenAddProduct,
+  onRemoveProduct
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -102,7 +104,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
             <thead>
               <tr className="bg-slate-950 border-b border-slate-800 text-xs font-normal text-slate-500">
                 <th className="p-3 w-12 text-center">Photo</th>
-                <th className="p-3 min-w-[150px] sm:min-w-[220px]">Product</th>
+                <th className="p-3 min-w-[150px] sm:min-w-[220px] sm:sticky sm:left-0 sm:z-10 sm:bg-slate-950 sm:border-r sm:border-slate-800">Product</th>
                 <th className="p-3 min-w-[72px] text-right">Stock</th>
                 <th className="p-3 min-w-[64px]">Unit</th>
                 <th className="p-3 min-w-[80px]">Rack</th>
@@ -134,7 +136,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                     </td>
 
                     {/* Product Name (Sticky Column) */}
-                    <td className="p-3 text-slate-100">
+                    <td className="p-3 text-slate-100 sm:sticky sm:left-0 sm:z-10 sm:bg-slate-900 sm:group-hover:bg-slate-850 sm:border-r sm:border-slate-800">
                       <button
                         onClick={() => onSelectProduct(p)}
                         className="hover:text-slate-100 text-left transition-colors font-medium"
@@ -250,13 +252,15 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                         </div>
                       ) : (
                         <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleStartEdit(p)}
-                            className="w-8 h-8 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-850 flex items-center justify-center transition-colors"
-                            title="Edit row"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
+                          {userRole === 'admin' && (
+                            <button
+                              onClick={() => handleStartEdit(p)}
+                              className="w-8 h-8 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-850 flex items-center justify-center transition-colors"
+                              title="Edit row"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => onSelectProduct(p)}
                             className="w-8 h-8 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-850 flex items-center justify-center transition-colors"
@@ -264,6 +268,23 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
+                          {userRole === 'admin' && (
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm(`Delete ${p.name}? The row disappears from every phone. Its stock history is kept, and the deletion is recorded in History.`)) return;
+                                try {
+                                  await onRemoveProduct(p);
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+                                }
+                              }}
+                              className="w-8 h-8 rounded-lg border border-slate-800 text-slate-400 hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-950 flex items-center justify-center transition-colors"
+                              title="Delete row"
+                              aria-label={`Delete ${p.name}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>

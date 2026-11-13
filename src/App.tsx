@@ -453,6 +453,7 @@ export function App() {
             onUpdateProduct={handleUpdateProductCell}
             onSelectProduct={(prod) => setSelectedProductForDetail(prod)}
             onOpenAddProduct={() => setProductForm({ open: true, product: null })}
+            onRemoveProduct={handleRemoveProduct}
           />
         )}
 
