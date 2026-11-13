@@ -17,7 +17,7 @@ import { getCurrentStaff, setCurrentStaff, getRoster, STAFF_CHANGED_EVENT } from
 import { setActor, logActivity, fetchActivity, ActivityEntry } from './lib/activity';
 import { StorePicker } from './components/stores/StorePicker';
 import { ALL_STORES, STORES_CHANGED_EVENT, StoreScope, fetchStores, getSavedScope, saveScope, stockIn, stockMap } from './lib/stores';
-import { Layers, Warehouse, ChevronDown } from 'lucide-react';
+import { Layers, Warehouse, ChevronDown, RefreshCw, Loader2 } from 'lucide-react';
 import { BackupModal } from './components/settings/BackupModal';
 
 import { MAIN_STORE_ID, Product, StockTransaction, Store, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
@@ -114,6 +114,7 @@ export function App() {
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [updateReady, setUpdateReady] = useState(isUpdateReady());
+  const [updating, setUpdating] = useState(false);
   useEffect(() => {
     const off = onUpdateReady(() => setUpdateReady(true));
     return () => { off(); };
@@ -436,8 +437,40 @@ export function App() {
         </div>
       )}
 
+      {/* Phones: a full-screen notice that can only be closed by updating */}
       {updateReady && (
-        <div className="border-b border-slate-800 bg-slate-950 text-slate-300 text-sm px-4 md:px-6 py-2">
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="update-title"
+          className="md:hidden fixed inset-0 z-[100] bg-[#141415] flex flex-col items-center justify-center px-6 text-center"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center">
+            <RefreshCw className="w-7 h-7" strokeWidth={2} />
+          </div>
+          <h2 id="update-title" className="mt-6 text-[22px] font-medium text-slate-100">Update the app</h2>
+          <p className="mt-2 max-w-xs text-[15px] text-slate-400">
+            A new version of Bahubali stock register is ready. Update to keep using the app
+          </p>
+          <p className="mt-3 max-w-xs text-sm text-slate-500">Your stock and any changes waiting to sync are kept</p>
+          <button
+            onClick={() => {
+              setUpdating(true);
+              applyUpdate();
+            }}
+            disabled={updating}
+            autoFocus
+            className="mt-8 w-full max-w-xs h-12 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-base font-semibold flex items-center justify-center gap-2 transition-colors active:scale-[0.98] disabled:opacity-70"
+          >
+            {updating && <Loader2 className="w-5 h-5 animate-spin" strokeWidth={2} />}
+            {updating ? 'Updating' : 'Update now'}
+          </button>
+        </div>
+      )}
+
+      {/* Tablets and computers: a bar at the top */}
+      {updateReady && (
+        <div className="hidden md:block border-b border-slate-800 bg-slate-950 text-slate-300 text-sm px-4 md:px-6 py-2">
           <div className="flex items-center justify-between gap-3">
             <span>A new version is ready. Your stock data stays as it is</span>
             <button

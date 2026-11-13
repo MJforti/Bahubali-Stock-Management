@@ -103,5 +103,7 @@ export function onUpdateReady(fn: () => void) {
 
 /** Activates the downloaded version; the page reloads on controllerchange. */
 export function applyUpdate() {
-  waitingWorker?.postMessage({ type: 'SKIP_WAITING' });
+  if (waitingWorker) waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+  // Never leave anyone stuck: if the new version doesn't take over quickly, reload anyway
+  setTimeout(() => window.location.reload(), waitingWorker ? 4000 : 0);
 }
