@@ -29,7 +29,18 @@ self.addEventListener('fetch', (event) => {
 
   // App pages: always answer from the cached app shell (works with no network)
   if (req.mode === 'navigate' && url.origin === self.location.origin) {
-    event.respondWith(caches.match('/index.html', { cacheName: PRECACHE, ignoreVary: true }).then((r) => r || fetch(req)));
+    // Fresh page from the network when it answers quickly, else the cached one (offline)
+    event.respondWith(
+      (async () => {
+        const cached = await caches.match('/index.html', { cacheName: PRECACHE, ignoreVary: true });
+        if (!cached) return fetch(req);
+        const network = fetch(req, { cache: 'no-store' })
+          .then((r) => (r && r.ok ? r : cached))
+          .catch(() => cached);
+        const timeout = new Promise((res) => setTimeout(() => res(cached), 3000));
+        return Promise.race([network, timeout]);
+      })()
+    );
     return;
   }
 
