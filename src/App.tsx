@@ -22,7 +22,7 @@ import { BackupModal } from './components/settings/BackupModal';
 
 import { MAIN_STORE_ID, Product, StockTransaction, Store, UserRole, RealtimeStatus, TransactionType } from './types/inventory';
 import { fetchProducts, createProduct, updateProduct, normalizeProduct } from './services/productService';
-import { fetchStockTransactions, recordStockMovement } from './services/stockService';
+import { fetchStockTransactions, recordStockMovement, transferStock } from './services/stockService';
 import { exportInventoryToExcel } from './services/excelService';
 import { setupRealtimeSync } from './services/realtimeSync';
 import { startSync, syncNow, onSyncStatus, SyncStatus } from './lib/sync';
@@ -124,7 +124,7 @@ export function App() {
 
   // Modal States
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
-  const [stockModal, setStockModal] = useState<{ open: boolean; type: TransactionType; product: Product | null }>({
+  const [stockModal, setStockModal] = useState<{ open: boolean; type: TransactionType | 'TRANSFER'; product: Product | null }>({
     open: false,
     type: 'IN',
     product: null
@@ -277,6 +277,10 @@ export function App() {
     setStockModal({ open: true, type: 'OUT', product });
   };
 
+  const handleOpenTransfer = (product: Product | null = null) => {
+    setStockModal({ open: true, type: 'TRANSFER', product });
+  };
+
   const staffName = () => currentStaff || (userRole === 'admin' ? 'Admin' : 'Staff');
 
   const applyMovementResult = (res: { product: Product; transaction: StockTransaction }, storeId: string) => {
@@ -295,6 +299,19 @@ export function App() {
   }) => {
     const res = await recordStockMovement({ ...params, userName: staffName() });
     applyMovementResult(res, params.storeId);
+  };
+
+  const handleTransfer = async (params: {
+    product: Product;
+    fromStoreId: string;
+    toStoreId: string;
+    quantity: number;
+    reason?: string;
+    reference?: string;
+  }) => {
+    const res = await transferStock({ ...params, userName: staffName() });
+    setProducts((prev) => prev.map((p) => (p.id === res.product.id ? res.product : p)));
+    setTransactions((prev) => [...res.transactions, ...prev.filter((t) => !res.transactions.some((n) => n.id === t.id))]);
   };
 
   const handleStockAdjustmentConfirm = async (params: {
@@ -508,6 +525,8 @@ export function App() {
             transactions={scopedTransactions}
             scopeLabel={scopeLabel}
             userRole={userRole}
+            canTransfer={activeStores.length > 1}
+            onOpenTransfer={() => handleOpenTransfer()}
             onOpenStockIn={(prod) => handleOpenStockIn(prod)}
             onOpenStockOut={(prod) => handleOpenStockOut(prod)}
             onOpenAddProduct={() => setProductForm({ open: true, product: null })}
@@ -536,7 +555,7 @@ export function App() {
         )}
 
         {activeTab === 'history' && (
-          <StockHistoryView transactions={scopedTransactions} activity={activity} products={products} stores={stores} scopeLabel={scopeLabel} />
+          <StockHistoryView transactions={scopedTransactions} allTransactions={transactions} activity={activity} products={products} stores={stores} scopeLabel={scopeLabel} />
         )}
 
         {activeTab === 'datasheet' && (
@@ -577,6 +596,7 @@ export function App() {
           onClose={() => setSelectedProductForDetail(null)}
           onOpenStockIn={(prod) => handleOpenStockIn(prod)}
           onOpenStockOut={(prod) => handleOpenStockOut(prod)}
+          onOpenTransfer={activeStores.length > 1 ? (prod) => handleOpenTransfer(prod) : undefined}
           onOpenAdjustment={(prod) => setAdjustmentProduct(prod)}
           onOpenEditProduct={(prod) => setProductForm({ open: true, product: prod })}
           onRemoveProduct={handleRemoveProduct}
@@ -593,6 +613,7 @@ export function App() {
           defaultStoreId={workingStore}
           onClose={() => setStockModal({ open: false, type: 'IN', product: null })}
           onConfirm={handleStockConfirm}
+          onTransfer={handleTransfer}
         />
       )}
 

@@ -31,6 +31,8 @@ interface StockHistoryViewProps {
   products: Product[];
   stores: Store[];
   scopeLabel: string;
+  /** Every movement (not only this store's), to find the other half of a transfer */
+  allTransactions: StockTransaction[];
 }
 
 type Section = 'all' | 'stock' | 'product' | 'people' | 'data';
@@ -89,7 +91,7 @@ interface Row {
 
 const PAGE = 60;
 
-export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions, activity, products, stores, scopeLabel }) => {
+export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions, activity, products, stores, scopeLabel, allTransactions }) => {
   const multiStore = stores.filter((st) => st.is_active).length > 1;
   const storeName = (id?: string) => stores.find((st) => st.id === (id || MAIN_STORE_ID))?.name || 'Main Store';
   const [section, setSection] = useState<Section>('all');
@@ -102,14 +104,18 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   const rows: Row[] = useMemo(() => {
-    const stockRows: Row[] = transactions.map((t) => {
+    // A transfer is two movements; when both are listed, show it once (from the stock-out half)
+    const listed = new Set(transactions.map((t) => t.id));
+    const stockRows: Row[] = transactions
+      .filter((t) => !(t.transfer_id && t.type === 'IN' && transactions.some((o) => o.transfer_id === t.transfer_id && o.id !== t.id && listed.has(o.id))))
+      .map((t) => {
       const p = productById.get(t.product_id);
       return {
         id: `tx-${t.id}`,
         at: t.created_at,
         user: t.user_name || 'Staff',
         section: 'stock',
-        searchText: [p?.name, t.product_name, p?.brand, p?.sku, t.user_name, t.reason, t.reference, storeName(t.store_id)].join(' ').toLowerCase(),
+        searchText: [p?.name, t.product_name, p?.brand, p?.sku, t.user_name, t.reason, t.reference, storeName(t.store_id), t.transfer_id ? 'transfer' : ''].join(' ').toLowerCase(),
         tx: t
       };
     });
@@ -126,6 +132,21 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
     }));
     return [...stockRows, ...activityRows].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
   }, [transactions, activity, productById, stores]);
+
+  const transferInfo = (t: StockTransaction): TransferInfo | undefined => {
+    if (!t.transfer_id) return undefined;
+    const other = allTransactions.find((o) => o.transfer_id === t.transfer_id && o.id !== t.id);
+    const outLeg = t.type === 'OUT' ? t : other;
+    const inLeg = t.type === 'IN' ? t : other;
+    const both = !!other && transactions.some((o) => o.id === other.id);
+    return {
+      both,
+      from: outLeg ? storeName(outLeg.store_id) : 'another store',
+      to: inLeg ? storeName(inLeg.store_id) : 'another store',
+      toBefore: inLeg?.previous_stock,
+      toAfter: inLeg?.new_stock
+    };
+  };
 
   const people = useMemo(() => Array.from(new Set(rows.map((r) => r.user))).sort((a, b) => a.localeCompare(b)), [rows]);
 
@@ -259,7 +280,12 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
               </h2>
               <ul className="rounded-2xl border border-slate-800 bg-slate-900 divide-y divide-slate-800">
                 {items.map((r) => (
-                  <li key={r.id}>{r.tx ? <StockRow tx={r.tx} product={productById.get(r.tx.product_id)} storeLabel={multiStore ? storeName(r.tx.store_id) : undefined} /> : <ActivityRow entry={r.entry!} product={r.entry?.product_id ? productById.get(r.entry.product_id) : undefined} />}</li>
+                  <li key={r.id}>{r.tx ? <StockRow
+                        tx={r.tx}
+                        product={productById.get(r.tx.product_id)}
+                        storeLabel={multiStore && scopeLabel === 'All stores' ? storeName(r.tx.store_id) : undefined}
+                        transfer={transferInfo(r.tx)}
+                      /> : <ActivityRow entry={r.entry!} product={r.entry?.product_id ? productById.get(r.entry.product_id) : undefined} />}</li>
                 ))}
               </ul>
             </section>
@@ -298,30 +324,61 @@ const Who: React.FC<{ user: string; role?: 'admin' | 'staff' }> = ({ user, role 
   </span>
 );
 
-const StockRow: React.FC<{ tx: StockTransaction; product?: Product; storeLabel?: string }> = ({ tx, product, storeLabel }) => {
+interface TransferInfo {
+  /** Both halves listed: one line "Transfer · A → B" */
+  both: boolean;
+  from: string;
+  to: string;
+  toBefore?: number;
+  toAfter?: number;
+}
+
+const StockRow: React.FC<{ tx: StockTransaction; product?: Product; storeLabel?: string; transfer?: TransferInfo }> = ({
+  tx,
+  product,
+  storeLabel,
+  transfer
+}) => {
   const isIn = tx.type === 'IN';
   const isOut = tx.type === 'OUT';
-  const sign = isIn ? '+' : isOut ? '−' : '';
-  const tone = isIn ? 'text-emerald-400' : isOut ? 'text-rose-400' : 'text-slate-100';
-  const kind = isIn ? 'Stock in' : isOut ? 'Stock out' : 'Count corrected';
+  let sign = isIn ? '+' : isOut ? '−' : '';
+  let tone = isIn ? 'text-emerald-400' : isOut ? 'text-rose-400' : 'text-slate-100';
+  let kind = isIn ? 'Stock in' : isOut ? 'Stock out' : 'Count corrected';
+  if (transfer) {
+    tone = 'text-slate-100';
+    if (transfer.both) {
+      sign = '';
+      kind = `Transfer · ${transfer.from} → ${transfer.to}`;
+      storeLabel = undefined;
+    } else {
+      kind = isOut ? `Transfer to ${transfer.to}` : `Transfer from ${transfer.from}`;
+    }
+  }
   const name = product?.name || tx.product_name || 'Product';
   return (
     <div className="flex items-center gap-3 px-4 py-3">
       <ProductThumb src={product?.image_url || tx.product_image} alt={name} size={40} />
       <div className="flex-1 min-w-0">
         <p className="text-[15px] text-slate-100 truncate">{name}</p>
-        <p className="mt-0.5 text-sm text-slate-500 truncate">
+        <p className={`mt-0.5 text-sm text-slate-500 ${transfer?.both ? '' : 'truncate'}`}>
           {kind}{storeLabel ? ` · ${storeLabel}` : ''} · <Who user={tx.user_name || 'Staff'} />
           {realReason(tx.reason) ? ` · ${tx.reason}` : ''}
           {tx.reference ? ` · Ref ${tx.reference}` : ''}
         </p>
+        {transfer?.both && (
+          <p className="mt-0.5 text-xs text-slate-500">
+            {transfer.from} {formatQty(tx.previous_stock)} → {formatQty(tx.new_stock)}
+            {transfer.toBefore !== undefined ? ` · ${transfer.to} ${formatQty(transfer.toBefore)} → ${formatQty(transfer.toAfter!)}` : ''}
+          </p>
+        )}
       </div>
       <div className="shrink-0 text-right">
         <p className={`text-[15px] font-semibold ${tone}`}>
           {sign}{formatQty(tx.quantity)}
         </p>
         <p className="mt-0.5 text-xs text-slate-500">
-          {formatQty(tx.previous_stock)} → {formatQty(tx.new_stock)} · {time(tx.created_at)}
+          {transfer?.both ? '' : `${formatQty(tx.previous_stock)} → ${formatQty(tx.new_stock)} · `}
+          {time(tx.created_at)}
         </p>
       </div>
     </div>

@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { X, Search, PlusCircle, MinusCircle, Package, AlertTriangle, Check, Loader2 } from 'lucide-react';
+import { X, Search, PlusCircle, MinusCircle, Package, AlertTriangle, Check, Loader2, ArrowLeftRight } from 'lucide-react';
 import { ProductThumb } from '../ui/ProductThumb';
 import { Product, Store, TransactionType } from '../../types/inventory';
 import { stockIn } from '../../lib/stores';
 
 interface StockMovementModalProps {
-  initialType?: TransactionType;
+  initialType?: TransactionType | 'TRANSFER';
   initialProduct?: Product | null;
   products: Product[];
   stores: Store[];
   defaultStoreId: string;
   onClose: () => void;
+  /** Move stock between two stores */
+  onTransfer: (params: { product: Product; fromStoreId: string; toStoreId: string; quantity: number; reason?: string; reference?: string }) => Promise<void>;
   onConfirm: (params: {
     product: Product;
     type: TransactionType;
@@ -28,12 +30,16 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
   stores,
   defaultStoreId,
   onClose,
-  onConfirm
+  onConfirm,
+  onTransfer
 }) => {
   const activeStores = stores.filter((st) => st.is_active);
   const [storeId, setStoreId] = useState<string>(defaultStoreId);
   const here = (p: Product) => stockIn(p, storeId);
-  const [type, setType] = useState<TransactionType>(initialType === 'ADJUSTMENT' ? 'IN' : initialType);
+  const storeName = (id: string) => stores.find((st) => st.id === id)?.name || 'Store';
+  const [type, setType] = useState<'IN' | 'OUT' | 'TRANSFER'>(initialType === 'ADJUSTMENT' ? 'IN' : initialType);
+  const canTransfer = activeStores.length > 1;
+  const [toStoreId, setToStoreId] = useState<string>(() => activeStores.find((st) => st.id !== defaultStoreId)?.id || defaultStoreId);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(initialProduct);
   const [searchQuery, setSearchQuery] = useState('');
   const [quantity, setQuantity] = useState<number>(1);
@@ -78,8 +84,16 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
     }
 
     // Negative stock check
-    if (type === 'OUT' && here(selectedProduct) < quantity) {
-      setError(`Cannot issue ${quantity} ${selectedProduct.unit}. This store has only ${here(selectedProduct)}`);
+    if ((type === 'OUT' || type === 'TRANSFER') && here(selectedProduct) < quantity) {
+      setError(
+        type === 'TRANSFER'
+          ? `Cannot move ${quantity} ${selectedProduct.unit}. That store has only ${here(selectedProduct)}`
+          : `Cannot issue ${quantity} ${selectedProduct.unit}. This store has only ${here(selectedProduct)}`
+      );
+      return;
+    }
+    if (type === 'TRANSFER' && toStoreId === storeId) {
+      setError('Pick two different stores');
       return;
     }
 
@@ -87,14 +101,11 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
     setError(null);
 
     try {
-      await onConfirm({
-        storeId,
-        product: selectedProduct,
-        type,
-        quantity,
-        reason: reason.trim(),
-        reference: reference.trim()
-      });
+      if (type === 'TRANSFER') {
+        await onTransfer({ product: selectedProduct, fromStoreId: storeId, toStoreId, quantity, reason: reason.trim(), reference: reference.trim() });
+      } else {
+        await onConfirm({ storeId, product: selectedProduct, type, quantity, reason: reason.trim(), reference: reference.trim() });
+      }
       onClose();
     } catch (err: any) {
       setError(err.message || 'Operation failed. Please try again.');
@@ -118,30 +129,44 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
         
         {/* Header with Type Selector */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0">
             <button
               onClick={() => { setType('IN'); setError(null); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
                 type === 'IN'
                   ? 'bg-slate-850 text-slate-100 border border-slate-700'
                   : 'border border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              <PlusCircle className="w-4 h-4" />
+              <PlusCircle className="w-4 h-4 hidden sm:block" strokeWidth={1.5} />
               <span>Stock in</span>
             </button>
 
             <button
               onClick={() => { setType('OUT'); setError(null); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
                 type === 'OUT'
                   ? 'bg-slate-850 text-slate-100 border border-slate-700'
                   : 'border border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              <MinusCircle className="w-4 h-4" />
+              <MinusCircle className="w-4 h-4 hidden sm:block" strokeWidth={1.5} />
               <span>Stock out</span>
             </button>
+
+            {canTransfer && (
+              <button
+                onClick={() => { setType('TRANSFER'); setError(null); }}
+                className={`flex items-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
+                  type === 'TRANSFER'
+                    ? 'bg-slate-850 text-slate-100 border border-slate-700'
+                    : 'border border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ArrowLeftRight className="w-4 h-4 hidden sm:block" strokeWidth={1.5} />
+                <span>Transfer</span>
+              </button>
+            )}
           </div>
 
           <button
@@ -160,6 +185,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
                 value={storeId}
                 onChange={(e) => {
                   setStoreId(e.target.value);
+                  if (e.target.value === toStoreId) setToStoreId(activeStores.find((st) => st.id !== e.target.value)?.id || toStoreId);
                   setError(null);
                 }}
                 aria-label="Store"
@@ -167,6 +193,24 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
               >
                 {activeStores.map((st) => (
                   <option key={st.id} value={st.id}>{st.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {type === 'TRANSFER' && (
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm text-slate-400">To store</span>
+              <select
+                value={toStoreId}
+                onChange={(e) => {
+                  setToStoreId(e.target.value);
+                  setError(null);
+                }}
+                aria-label="To store"
+                className="h-10 min-w-0 max-w-[60%] px-3 rounded-lg bg-slate-950 border border-slate-700 text-base sm:text-sm text-slate-100 focus:outline-none focus:border-slate-500"
+              >
+                {activeStores.map((st) => (
+                  <option key={st.id} value={st.id} disabled={st.id === storeId}>{st.name}</option>
                 ))}
               </select>
             </label>
@@ -183,7 +227,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
           {!selectedProduct ? (
             <div className="space-y-3">
               <label className="text-xs font-medium text-slate-300 block">
-                {type === 'IN' ? 'Which product came in?' : 'Which product is going out?'}
+                {type === 'IN' ? 'Which product came in?' : type === 'TRANSFER' ? 'Which product are you moving?' : 'Which product is going out?'}
               </label>
 
               <div className="relative">
@@ -249,7 +293,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
               {/* Quantity Input & Chips */}
               <div className="space-y-2 bg-slate-950 p-4 rounded-2xl border border-slate-800">
                 <label className="text-xs font-medium text-slate-300 block">
-                  {type === 'IN' ? 'Quantity received' : 'Quantity going out'}
+                  {type === 'IN' ? 'Quantity received' : type === 'TRANSFER' ? 'Quantity to move' : 'Quantity going out'}
                 </label>
 
                 <div className="flex items-center gap-3">
@@ -296,14 +340,30 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
                 </div>
 
                 {/* New Stock Preview Calculation */}
-                <div className="flex items-center justify-between pt-3 border-t border-slate-850 text-xs">
-                  <span className="text-slate-400">New stock</span>
-                  <span className={`font-semibold text-sm ${
-                    newCalculatedStock < 0 ? 'text-rose-400' : 'text-emerald-400'
-                  }`}>
-                    {currentStockNum} → {newCalculatedStock} {selectedProduct.unit}
-                  </span>
-                </div>
+                {type === 'TRANSFER' ? (
+                  <div className="pt-3 border-t border-slate-850 text-xs space-y-1.5">
+                    {[
+                      [storeName(storeId), currentStockNum, currentStockNum - qtyNum],
+                      [storeName(toStoreId), stockIn(selectedProduct, toStoreId), stockIn(selectedProduct, toStoreId) + qtyNum]
+                    ].map(([label, before, after]) => (
+                      <div key={label as string} className="flex items-center justify-between">
+                        <span className="text-slate-400">{label}</span>
+                        <span className={`font-semibold text-sm ${Number(after) < 0 ? 'text-rose-400' : 'text-slate-100'}`}>
+                          {before} → {after} {selectedProduct.unit}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-850 text-xs">
+                    <span className="text-slate-400">New stock</span>
+                    <span className={`font-semibold text-sm ${
+                      newCalculatedStock < 0 ? 'text-rose-400' : 'text-emerald-400'
+                    }`}>
+                      {currentStockNum} → {newCalculatedStock} {selectedProduct.unit}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Optional References */}
@@ -358,7 +418,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    <span>{type === 'IN' ? 'Confirm stock in' : 'Confirm stock out'}</span>
+                    <span>{type === 'IN' ? 'Confirm stock in' : type === 'TRANSFER' ? 'Confirm transfer' : 'Confirm stock out'}</span>
                   </>
                 )}
               </button>

@@ -110,3 +110,62 @@ export async function recordStockMovement(params: {
   notifyOtherTabs({ kind: 'transaction', transaction: result.transaction });
   return result;
 }
+
+/**
+ * Move stock from one store to another: a stock out from the first store and a
+ * stock in to the second, saved together (both or neither) and linked by the
+ * same transfer_id.
+ */
+export async function transferStock(params: {
+  product: Product;
+  fromStoreId: string;
+  toStoreId: string;
+  quantity: number;
+  reason?: string;
+  reference?: string;
+  userName: string;
+}): Promise<{ product: Product; transactions: StockTransaction[] }> {
+  const { fromStoreId, toStoreId, userName } = params;
+  const qty = Number(params.quantity);
+  if (fromStoreId === toStoreId) throw new Error('Pick two different stores');
+  if (!Number.isFinite(qty) || qty <= 0) throw new Error('Quantity must be more than zero');
+
+  const result = await withTransaction([PRODUCTS, TRANSACTIONS, OUTBOX], async (tx, get) => {
+    const stored = await get<Product>(PRODUCTS, params.product.id);
+    if (!stored) throw new Error('Product not found.');
+    const product = normalizeProduct(stored);
+    const byStore = stockMap(product);
+    const fromBefore = byStore[fromStoreId] ?? 0;
+    const toBefore = byStore[toStoreId] ?? 0;
+    if (qty > fromBefore) {
+      throw new Error(`Cannot move ${qty} ${product.unit}. That store has only ${fromBefore} ${product.unit}`);
+    }
+
+    const now = new Date().toISOString();
+    const transferId = newId();
+    const nextByStore = { ...byStore, [fromStoreId]: fromBefore - qty, [toStoreId]: toBefore + qty };
+    const updated: Product = { ...product, stock_by_store: nextByStore, current_stock: totalOf(nextByStore), updated_at: now, updated_by: userName };
+    const base = {
+      product_id: product.id,
+      transfer_id: transferId,
+      quantity: qty,
+      reason: (params.reason || '').trim(),
+      reference: params.reference || '',
+      user_name: userName || 'Staff',
+      created_at: now
+    };
+    const out: StockTransaction = { ...base, id: newId(), store_id: fromStoreId, type: 'OUT', previous_stock: fromBefore, new_stock: fromBefore - qty };
+    const into: StockTransaction = { ...base, id: newId(), store_id: toStoreId, type: 'IN', previous_stock: toBefore, new_stock: toBefore + qty };
+
+    tx.objectStore(PRODUCTS).put(updated);
+    tx.objectStore(TRANSACTIONS).put(out);
+    tx.objectStore(TRANSACTIONS).put(into);
+    queueInTx(tx, { kind: 'movement', id: out.id });
+    queueInTx(tx, { kind: 'movement', id: into.id });
+    return { product: updated, transactions: [withProductInfo(out, updated), withProductInfo(into, updated)] };
+  });
+
+  notifyOtherTabs({ kind: 'product', product: result.product });
+  result.transactions.forEach((t) => notifyOtherTabs({ kind: 'transaction', transaction: t }));
+  return result;
+}

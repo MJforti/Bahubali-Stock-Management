@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowDownToLine, ArrowUpFromLine, PackagePlus, Search, Plus, ChevronRight } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, PackagePlus, Search, Plus, ChevronRight } from 'lucide-react';
 import { Product, StockTransaction, UserRole } from '../../types/inventory';
 import { ProductThumb } from '../ui/ProductThumb';
 import { formatQty, stockState, stockTextClass } from '../ui/stock';
@@ -9,6 +9,8 @@ interface DashboardViewProps {
   transactions: StockTransaction[];
   userRole: UserRole;
   scopeLabel: string;
+  canTransfer: boolean;
+  onOpenTransfer: () => void;
   onOpenStockIn: (product?: Product) => void;
   onOpenStockOut: (product?: Product) => void;
   onOpenAddProduct: () => void;
@@ -36,6 +38,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   transactions,
   userRole,
   scopeLabel,
+  canTransfer,
+  onOpenTransfer,
   onOpenStockIn,
   onOpenStockOut,
   onOpenAddProduct,
@@ -49,7 +53,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const out = active.filter((p) => stockState(p) === 'out');
   const reorder = [...out, ...low];
 
-  const today = transactions.filter((t) => isToday(t.created_at));
+  // Transfers between stores aren't goods received or issued, so they're left out here
+  const today = transactions.filter((t) => isToday(t.created_at) && !t.transfer_id);
   const unitsIn = today.filter((t) => t.type === 'IN').reduce((a, t) => a + (Number(t.quantity) || 0), 0);
   const unitsOut = today.filter((t) => t.type === 'OUT').reduce((a, t) => a + (Number(t.quantity) || 0), 0);
   const movesIn = today.filter((t) => t.type === 'IN').length;
@@ -89,7 +94,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Actions */}
       <section>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className={`grid grid-cols-2 gap-3 ${canTransfer ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
           <button
             onClick={() => onOpenStockIn()}
             className="h-12 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[15px] font-semibold flex items-center gap-3 transition-colors active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
@@ -101,6 +106,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ArrowUpFromLine className="w-[18px] h-[18px] text-slate-400" strokeWidth={1.5} />
             Stock out
           </button>
+          {canTransfer && (
+            <button onClick={onOpenTransfer} className={`${secondaryBtn} col-span-2 lg:col-span-1`}>
+              <ArrowLeftRight className="w-[18px] h-[18px] text-slate-400" strokeWidth={1.5} />
+              Transfer
+            </button>
+          )}
           <button onClick={onOpenAddProduct} disabled={!isAdmin} className={secondaryBtn}>
             <PackagePlus className="w-[18px] h-[18px] text-slate-400" strokeWidth={1.5} />
             Add product
@@ -183,7 +194,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 const tone = tx.type === 'IN' ? 'text-emerald-400' : tx.type === 'OUT' ? 'text-rose-400' : 'text-slate-100';
                 const time = new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
                 const day = isToday(tx.created_at) ? time : new Date(tx.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-                const kind = tx.type === 'IN' ? 'Stock in' : tx.type === 'OUT' ? 'Stock out' : 'Count corrected';
+                const kind = tx.transfer_id ? (tx.type === 'OUT' ? 'Transfer out' : 'Transfer in') : tx.type === 'IN' ? 'Stock in' : tx.type === 'OUT' ? 'Stock out' : 'Count corrected';
                 return (
                   <li key={tx.id}>
                     <div

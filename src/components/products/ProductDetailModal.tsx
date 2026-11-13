@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowDownToLine, ArrowUpFromLine, 
+import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, 
   X, 
   MapPin, 
   Tag, 
@@ -26,6 +26,8 @@ interface ProductDetailModalProps {
   onClose: () => void;
   onOpenStockIn: (product: Product) => void;
   onOpenStockOut: (product: Product) => void;
+  /** Only when there are two or more stores */
+  onOpenTransfer?: (product: Product) => void;
   onOpenAdjustment: (product: Product) => void;
   onOpenEditProduct: (product: Product) => void;
   onRemoveProduct: (product: Product) => Promise<void>;
@@ -42,6 +44,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onClose,
   onOpenStockIn,
   onOpenStockOut,
+  onOpenTransfer,
   onOpenAdjustment,
   onOpenEditProduct,
   onRemoveProduct
@@ -151,6 +154,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <ArrowUpFromLine className="w-4 h-4" strokeWidth={1.5} />
                   <span>Stock out</span>
                 </button>
+
+                {onOpenTransfer && (
+                  <button
+                    onClick={() => onOpenTransfer(product)}
+                    className="h-11 flex items-center justify-center gap-2 text-slate-300 hover:text-slate-100 hover:bg-slate-850 border border-slate-800 rounded-xl text-[15px] transition-colors"
+                  >
+                    <ArrowLeftRight className="w-4 h-4" strokeWidth={1.5} />
+                    <span>Transfer</span>
+                  </button>
+                )}
 
                 {userRole === 'admin' && (
                   <button

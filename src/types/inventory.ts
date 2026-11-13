@@ -59,6 +59,8 @@ export interface StockTransaction {
   product_id: string;
   /** Store the movement happened in (older entries: Main Store) */
   store_id?: string;
+  /** Same id on the OUT and IN halves of a transfer between stores */
+  transfer_id?: string;
   type: TransactionType;
   quantity: number;
   previous_stock: number;
