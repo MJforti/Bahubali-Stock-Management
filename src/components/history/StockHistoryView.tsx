@@ -23,6 +23,7 @@ import { ProductThumb } from '../ui/ProductThumb';
 import { realReason, formatQty } from '../ui/stock';
 import { MAIN_STORE_ID, Product, StockTransaction, Store } from '../../types/inventory';
 import { ActivityAction, ActivityEntry, FieldChange } from '../../lib/activity';
+import { DailySummaries } from './DailySummaries';
 
 interface StockHistoryViewProps {
   transactions: StockTransaction[];
@@ -34,7 +35,7 @@ interface StockHistoryViewProps {
   allTransactions: StockTransaction[];
 }
 
-type Section = 'all' | 'stock' | 'product' | 'people' | 'data';
+type Section = 'all' | 'stock' | 'product' | 'people' | 'data' | 'summary';
 type Period = 'all' | 'today' | '7d' | '30d';
 
 const SECTIONS: { id: Section; label: string }[] = [
@@ -42,7 +43,8 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: 'stock', label: 'Stock' },
   { id: 'product', label: 'Products' },
   { id: 'people', label: 'People and access' },
-  { id: 'data', label: 'Stores and backup' }
+  { id: 'data', label: 'Stores and backup' },
+  { id: 'summary', label: 'Daily summaries' }
 ];
 
 const SECTION_HINT: Record<Section, string> = {
@@ -50,7 +52,8 @@ const SECTION_HINT: Record<Section, string> = {
   stock: 'Stock in, stock out and count corrections',
   product: 'Products added, edited, removed or imported',
   people: 'Staff list changes, who used the phone, and admin mode',
-  data: 'Stores, backups, imports and exports'
+  data: 'Stores, backups, imports and exports',
+  summary: 'Saved every day at 8 PM: stock in and out for each store where stock moved'
 };
 
 const ACTION_ICON: Record<ActivityAction, typeof Package> = {
@@ -171,7 +174,7 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
   }, [rows, query, person, period]);
 
   const counts = useMemo(() => {
-    const c: Record<Section, number> = { all: filtered.length, stock: 0, product: 0, people: 0, data: 0 };
+    const c: Record<Section, number> = { all: filtered.length, stock: 0, product: 0, people: 0, data: 0, summary: 0 };
     filtered.forEach((r) => c[r.section]++);
     return c;
   }, [filtered]);
@@ -221,13 +224,14 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
               }`}
             >
               {s.label}
-              <span className={`text-xs ${section === s.id ? 'text-slate-400' : 'text-slate-600'}`}>{counts[s.id]}</span>
+              {s.id !== 'summary' && <span className={`text-xs ${section === s.id ? 'text-slate-400' : 'text-slate-600'}`}>{counts[s.id]}</span>}
             </button>
           ))}
         </div>
       </div>
       <p className="-mt-2 text-sm text-slate-500">{SECTION_HINT[section]}</p>
 
+      {section === 'summary' ? <DailySummaries /> : (<>
       {/* Filters */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <label className="relative block col-span-2">
@@ -301,6 +305,7 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
           )}
         </>
       )}
+      </>)}
     </div>
   );
 };
