@@ -70,3 +70,12 @@ export async function refreshAlerts() {
     /* offline: try next time */
   }
 }
+
+export async function sendTestAlert(): Promise<void> {
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = await reg?.pushManager.getSubscription();
+  if (!sub) throw new Error('Turn alerts on first');
+  await save(sub);
+  const { data, error } = await supabase.functions.invoke('send-stock-alerts', { body: { test: true, endpoint: sub.endpoint } });
+  if (error || !data?.ok) throw new Error(data?.error || 'Could not send the test. Check the internet connection');
+}

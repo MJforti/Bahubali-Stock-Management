@@ -1,7 +1,6 @@
 // Sends low / out of stock alerts as phone notifications (web push).
 // Called by the database (trigger on stock_alerts) whenever an alert is
-// recorded. It takes no input: it only sends alerts already in the database,
-// each exactly once, so calling it again is harmless.
+// recorded, and by the app's "Send test alert" button.
 import webpush from 'npm:web-push@3.6.7';
 import { createClient } from 'npm:@supabase/supabase-js@2.48.1';
 
@@ -47,11 +46,29 @@ function message(alerts: Alert[]) {
   };
 }
 
-Deno.serve(async () => {
+const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info' };
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     const { data: cfg, error: cfgErr } = await supabase.rpc('push_config');
     if (cfgErr || !cfg?.vapid_private_key) throw new Error(`Push keys missing: ${cfgErr?.message ?? 'not set'}`);
     webpush.setVapidDetails(cfg.vapid_subject, cfg.vapid_public_key, cfg.vapid_private_key);
+
+    // Test from the app: only to a phone that is already registered
+    const input = await req.json().catch(() => ({}));
+    if (input?.test && typeof input.endpoint === 'string') {
+      const { data: s } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').eq('endpoint', input.endpoint).maybeSingle();
+      if (!s) return Response.json({ ok: false, error: 'This phone is not registered for alerts' }, { headers: cors });
+      try {
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+          JSON.stringify({ title: 'Test alert', body: 'Low stock alerts are working on this phone', tag: 'stock-test', url: '/' }), { TTL: 600, urgency: 'high' });
+        return Response.json({ ok: true }, { headers: cors });
+      } catch (err: any) {
+        console.error('test push failed', err?.statusCode, err?.body ?? String(err));
+        return Response.json({ ok: false, error: `The phone's push service refused it (${err?.statusCode ?? 'no reply'}). Turn alerts off and on again` }, { headers: cors });
+      }
+    }
 
     const { data: alerts, error } = await supabase.rpc('claim_stock_alerts');
     if (error) throw error;
@@ -60,7 +77,7 @@ Deno.serve(async () => {
     const { data: subs, error: subErr } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth');
     if (subErr) throw subErr;
 
-    const payload = JSON.stringify({ ...message(alerts as Alert[]), url: '/?view=reorder' });
+    const payload = JSON.stringify({ ...message(alerts as Alert[]), url: '/' });
     const ok: string[] = [];
     const gone: string[] = [];
     await Promise.all(
@@ -85,6 +102,6 @@ Deno.serve(async () => {
     return Response.json({ alerts: alerts.length, phones: subs?.length ?? 0, delivered, removed: gone.length });
   } catch (err: any) {
     console.error('send-stock-alerts', err);
-    return Response.json({ error: String(err?.message ?? err) }, { status: 500 });
+    return Response.json({ error: String(err?.message ?? err) }, { status: 500, headers: cors });
   }
 });

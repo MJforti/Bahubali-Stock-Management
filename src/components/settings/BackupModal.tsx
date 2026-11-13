@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Download, Upload, Loader2, Cloud, Bell } from 'lucide-react';
-import { AlertsState, alertsState, turnAlertsOff, turnAlertsOn } from '../../lib/alerts';
+import { AlertsState, alertsState, sendTestAlert, turnAlertsOff, turnAlertsOn } from '../../lib/alerts';
 import { exportBackup, restoreBackup, notifyOtherTabs } from '../../lib/localDb';
 import { logActivity } from '../../lib/activity';
 import { resendEverything, SyncStatus } from '../../lib/sync';
@@ -32,6 +32,21 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, syncStatus, o
   const [alerts, setAlerts] = useState<AlertsState | null>(null);
   const [alertsBusy, setAlertsBusy] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [testNote, setTestNote] = useState<string | null>(null);
+
+  const test = async () => {
+    setAlertsBusy(true);
+    setAlertsError(null);
+    setTestNote(null);
+    try {
+      await sendTestAlert();
+      setTestNote('Test sent. It should appear in a few seconds');
+    } catch (err: any) {
+      setAlertsError(err?.message || 'Could not send the test');
+    } finally {
+      setAlertsBusy(false);
+    }
+  };
 
   useEffect(() => {
     alertsState().then(setAlerts, () => setAlerts('unsupported'));
@@ -179,6 +194,12 @@ export const BackupModal: React.FC<BackupModalProps> = ({ isAdmin, syncStatus, o
                 </button>
               )}
             </div>
+            {alerts === 'on' && (
+              <button onClick={test} disabled={alertsBusy} className="mt-3 h-9 px-3 rounded-lg border border-slate-700 text-sm text-slate-200 hover:bg-slate-850 transition-colors disabled:opacity-50">
+                Send test alert
+              </button>
+            )}
+            {testNote && <p className="mt-2 text-sm text-slate-400">{testNote}</p>}
             {alertsError && <p className="mt-2 text-sm text-rose-400">{alertsError}</p>}
           </div>
         </section>
