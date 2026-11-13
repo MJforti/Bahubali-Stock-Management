@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Supabase",
+      "mcp__Vercel",
+      "mcp__github"
+    ]
+  }
+}
