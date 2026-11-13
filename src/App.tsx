@@ -239,6 +239,13 @@ export function App() {
     refreshAlerts();
   }, [currentStaff, userRole]);
 
+  // Re-check alerts whenever the app comes back to the front (iPhones can drop them after an update)
+  useEffect(() => {
+    const onShow = () => document.visibilityState === 'visible' && refreshAlerts();
+    document.addEventListener('visibilitychange', onShow);
+    return () => document.removeEventListener('visibilitychange', onShow);
+  }, []);
+
   // Activity log for the History page
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const loadActivity = useCallback(() => {

@@ -49,9 +49,11 @@ export async function turnAlertsOn(): Promise<void> {
     (await reg.pushManager.getSubscription()) ||
     (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) }));
   await save(sub);
+  want(true);
 }
 
 export async function turnAlertsOff(): Promise<void> {
+  want(false);
   const reg = await navigator.serviceWorker.getRegistration();
   const sub = await reg?.pushManager.getSubscription();
   if (!sub) return;
@@ -59,15 +61,46 @@ export async function turnAlertsOff(): Promise<void> {
   await sub.unsubscribe();
 }
 
-/** Keeps the server's copy fresh (name changes, renewed subscriptions). */
+const WANTED = 'bahubali_alerts_wanted';
+const want = (on: boolean) => {
+  try {
+    on ? localStorage.setItem(WANTED, '1') : localStorage.removeItem(WANTED);
+  } catch {
+    /* ignore */
+  }
+};
+const wanted = () => {
+  try {
+    return localStorage.getItem(WANTED) === '1';
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Runs whenever the app opens. iPhones can drop or replace the push
+ * registration when the app updates; if alerts were turned on here and
+ * notifications are still allowed, register again so alerts keep coming.
+ */
 export async function refreshAlerts() {
   try {
-    if ((await alertsState()) !== 'on') return;
-    const reg = await navigator.serviceWorker.getRegistration();
-    const sub = await reg?.pushManager.getSubscription();
-    if (sub) await save(sub);
-  } catch {
-    /* offline: try next time */
+    if (!supported() || !navigator.onLine || Notification.permission !== 'granted') return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub && !wanted()) return;
+    if (sub) {
+      want(true);
+      // Is this exact registration still known to the server?
+      const { data } = await supabase.rpc('daily_summary_setting', { endpoint_url: sub.endpoint });
+      if (data === null || data === undefined) {
+        await sub.unsubscribe().catch(() => {});
+        sub = null;
+      }
+    }
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) });
+    await save(sub);
+  } catch (err) {
+    console.warn('Could not refresh alerts', err);
   }
 }
 

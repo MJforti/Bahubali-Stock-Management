@@ -104,3 +104,25 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+// The browser replaced this phone's push registration: register the new one
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const SUPABASE = 'https://bpbhnnnrjckcqjvgogsu.supabase.co';
+  const KEY = 'sb_publishable_XIftpJPy3WCXwLDXd81m2A_CeTjKrYE';
+  const rpc = (fn, body) =>
+    fetch(`${SUPABASE}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  event.waitUntil(
+    (async () => {
+      const old = event.oldSubscription;
+      let sub = event.newSubscription;
+      if (!sub && old && old.options) sub = await self.registration.pushManager.subscribe(old.options);
+      if (!sub) return;
+      await rpc('subscribe_push', { sub: sub.toJSON(), person: '', device: 'Updated registration' });
+      if (old && old.endpoint !== sub.endpoint) await rpc('unsubscribe_push', { endpoint_url: old.endpoint });
+    })().catch(() => {})
+  );
+});
