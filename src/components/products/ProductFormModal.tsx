@@ -1,3 +1,4 @@
+import { SHOW_MONEY } from '../ui/stock';
 import React, { useState, useRef } from 'react';
 import { X, Camera, Image as ImageIcon, Upload, Loader2, Check } from 'lucide-react';
 import { Product, Store, UnitType } from '../../types/inventory';
@@ -369,8 +370,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           </div>
 
           {/* Pricing & Supplier */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            
+          <div className={`grid grid-cols-1 gap-3 ${SHOW_MONEY ? 'sm:grid-cols-3' : ''}`}>
+            {SHOW_MONEY && (<>
             {/* Purchase Price */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-300">Cost price (₹)</label>
@@ -396,6 +397,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 font-medium focus:outline-none focus:border-slate-600"
               />
             </div>
+            </>)}
 
             {/* Supplier */}
             <div className="space-y-1">

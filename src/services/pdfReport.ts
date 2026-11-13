@@ -5,6 +5,7 @@
  */
 import { MAIN_STORE_ID, Product, Store } from '../types/inventory';
 import { ALL_STORES, StoreScope, stockIn, stockMap } from '../lib/stores';
+import { SHOW_MONEY } from '../components/ui/stock';
 
 const num = (n: number) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 // The built-in PDF fonts have no rupee sign
@@ -46,7 +47,7 @@ export async function exportStockReportPdf(products: Product[], opts: { stores: 
   const boxes: [string, string][] = [
     ['Products', num(list.length)],
     ['Units in stock', num(units)],
-    ['Stock value (cost)', rs(value)],
+    ...(SHOW_MONEY ? ([['Stock value (cost)', rs(value)]] as [string, string][]) : []),
     ['Low stock', num(lowCount)],
     ['Out of stock', num(outCount)]
   ];
@@ -55,16 +56,17 @@ export async function exportStockReportPdf(products: Product[], opts: { stores: 
     const x = M + i * bw;
     doc.setDrawColor(220).roundedRect(x + 2, M + 34, bw - 4, 40, 4, 4);
     doc.setFontSize(8).setTextColor(110).text(label, x + 10, M + 48);
-    const warn = i >= 3 && v !== '0';
+    const isOut = label === 'Out of stock';
+    const warn = (isOut || label === 'Low stock') && v !== '0';
     doc.setFont('helvetica', 'bold').setFontSize(12);
-    if (warn) doc.setTextColor(i === 4 ? 190 : 180, i === 4 ? 40 : 110, 0);
+    if (warn) doc.setTextColor(isOut ? 190 : 180, isOut ? 40 : 110, 0);
     else doc.setTextColor(20);
     doc.text(v, x + 10, M + 66);
     doc.setFont('helvetica', 'normal');
   });
 
   // Stock table
-  const head = ['Product', 'SKU', 'Rack', ...perStore.map((s) => s.name), perStore.length ? 'Total' : 'Stock', 'Unit', 'Min', 'Cost', 'Value', 'Status'];
+  const head = ['Product', 'SKU', 'Rack', ...perStore.map((s) => s.name), perStore.length ? 'Total' : 'Stock', 'Unit', 'Min', ...(SHOW_MONEY ? ['Cost', 'Value'] : []), 'Status'];
   const body = list.map((p) => [
     `${p.name}${p.brand ? `\n${p.brand}` : ''}`,
     p.sku || '',
@@ -73,8 +75,7 @@ export async function exportStockReportPdf(products: Product[], opts: { stores: 
     num(qty(p)),
     String(p.unit || ''),
     num(p.minimum_stock),
-    rs(p.purchase_price),
-    rs(Math.max(0, qty(p)) * Number(p.purchase_price || 0)),
+    ...(SHOW_MONEY ? [rs(p.purchase_price), rs(Math.max(0, qty(p)) * Number(p.purchase_price || 0))] : []),
     status(p)
   ]);
   autoTable(doc, {

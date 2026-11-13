@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Product, StockTransaction } from '../../types/inventory';
-import { formatQty, stockState } from '../ui/stock';
+import { formatQty, stockState, SHOW_MONEY } from '../ui/stock';
 
 /*
  * Overview charts, in the app's own palette: graphite plus the amber accent.
@@ -251,7 +251,8 @@ export const OverviewCharts: React.FC<Props> = ({ products, transactions, stores
   const byCategory = useMemo(() => {
     const m = new Map<string, number>();
     for (const p of active) {
-      const v = Math.max(0, Number(p.current_stock) || 0) * (Number(p.purchase_price) || 0);
+      // Value at cost, or units while money is hidden
+      const v = Math.max(0, Number(p.current_stock) || 0) * (SHOW_MONEY ? Number(p.purchase_price) || 0 : 1);
       const c = p.category || 'Uncategorised';
       m.set(c, (m.get(c) || 0) + v);
     }
@@ -283,10 +284,14 @@ export const OverviewCharts: React.FC<Props> = ({ products, transactions, stores
       <DailyFlow transactions={transactions} />
       <Health products={active} />
 
-      <Card title="Stock value by category" note={`${rs(totalValue)} at cost price`} className="xl:col-span-2">
+      <Card
+        title={SHOW_MONEY ? 'Stock value by category' : 'Stock by category'}
+        note={SHOW_MONEY ? `${rs(totalValue)} at cost price` : `${formatQty(totalValue)} units on shelves`}
+        className="xl:col-span-2"
+      >
         <Bars
-          empty="Add cost prices to see stock value"
-          rows={byCategory.map(([c, v]) => ({ label: c, value: v, text: rs(v), sub: totalValue ? `${Math.round((v / totalValue) * 100)}%` : undefined }))}
+          empty={SHOW_MONEY ? 'Add cost prices to see stock value' : 'No stock on shelves'}
+          rows={byCategory.map(([c, v]) => ({ label: c, value: v, text: SHOW_MONEY ? rs(v) : `${formatQty(v)} units`, sub: totalValue ? `${Math.round((v / totalValue) * 100)}%` : undefined }))}
         />
       </Card>
 
@@ -298,10 +303,10 @@ export const OverviewCharts: React.FC<Props> = ({ products, transactions, stores
       </Card>
 
       {stores.length > 1 && (
-        <Card title="Stock by store" note="Units on shelves and their value at cost" className="xl:col-span-5">
+        <Card title="Stock by store" note={SHOW_MONEY ? 'Units on shelves and their value at cost' : 'Units on shelves'} className="xl:col-span-5">
           <Bars
             empty="No stock recorded in any store"
-            rows={stores.map((s) => ({ label: s.name, value: s.units, text: `${formatQty(s.units)} units`, sub: rs(s.value) }))}
+            rows={stores.map((s) => ({ label: s.name, value: s.units, text: `${formatQty(s.units)} units`, sub: SHOW_MONEY ? rs(s.value) : undefined }))}
           />
         </Card>
       )}

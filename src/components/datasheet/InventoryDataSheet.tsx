@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Search, Edit2, Check, X, Eye, Plus, Trash2, Upload, Download, FileText } from 'lucide-react';
 import { downloadSampleSheet } from '../../services/excelService';
 import { ProductThumb } from '../ui/ProductThumb';
-import { formatPrice } from '../ui/stock';
+import { formatPrice, SHOW_MONEY } from '../ui/stock';
 import { Product, Store, UserRole } from '../../types/inventory';
 
 interface InventoryDataSheetProps {
@@ -80,7 +80,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
         <div>
           <h1 className="text-[28px] leading-tight font-medium text-slate-100">Data sheet</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {scopeLabel} · {userRole === 'admin' ? (canEditStock ? 'edit stock, prices and racks right in the table' : 'pick one store at the top to edit its stock here') : 'all products in one table'}
+            {scopeLabel} · {userRole === 'admin' ? (canEditStock ? SHOW_MONEY ? 'edit stock, prices and racks right in the table' : 'edit stock, minimums and racks right in the table' : 'pick one store at the top to edit its stock here') : 'all products in one table'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -153,8 +153,8 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                 <th className="p-3 min-w-[130px]">Category</th>
                 <th className="p-3 min-w-[110px]">SKU</th>
                 <th className="p-3 min-w-[90px] text-right">Minimum</th>
-                <th className="p-3 min-w-[100px] text-right">Cost</th>
-                <th className="p-3 min-w-[100px] text-right">Price</th>
+                {SHOW_MONEY && <th className="p-3 min-w-[100px] text-right">Cost</th>}
+                {SHOW_MONEY && <th className="p-3 min-w-[100px] text-right">Price</th>}
                 <th className="p-3 min-w-[100px] text-center"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
@@ -245,6 +245,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                       )}
                     </td>
 
+                    {SHOW_MONEY && (<>
                     {/* Purchase Price (Editable) */}
                     <td className="p-3 text-right font-mono">
                       {isEditing ? (
@@ -272,6 +273,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
                         <span className="text-slate-100">{formatPrice(p.selling_price)}</span>
                       )}
                     </td>
+                    </>)}
 
                     {/* Actions */}
                     <td className="p-3 text-center">

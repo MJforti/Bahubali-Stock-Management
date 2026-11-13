@@ -1,3 +1,4 @@
+import { SHOW_MONEY } from '../components/ui/stock';
 import { ExcelColumnMapping, MAIN_STORE_ID, Product, Store } from '../types/inventory';
 import { ALL_STORES, StoreScope, stockIn, stockMap } from '../lib/stores';
 import { INITIAL_CATEGORIES } from '../data/seedData';
@@ -8,7 +9,7 @@ import { INITIAL_CATEGORIES } from '../data/seedData';
  * One row per product per store: a product kept in two stores has two rows
  * with the same SKU.
  */
-export const SHEET_COLUMNS: { key: keyof ExcelColumnMapping; header: string; width: number; help: string }[] = [
+const ALL_COLUMNS: { key: keyof ExcelColumnMapping; header: string; width: number; help: string }[] = [
   { key: 'name', header: 'Product Name', width: 34, help: 'Required. What staff search for, e.g. Bosch 8mm Drill Bit for Concrete' },
   { key: 'brand', header: 'Brand', width: 16, help: 'e.g. Bosch, Asian Paints' },
   { key: 'category', header: 'Category', width: 22, help: 'One of the categories on this sheet, or a new one' },
@@ -26,9 +27,17 @@ export const SHEET_COLUMNS: { key: keyof ExcelColumnMapping; header: string; wid
   { key: 'description', header: 'Description', width: 36, help: 'Optional' }
 ];
 
+const MONEY_KEYS = ['purchase_price', 'selling_price'];
+export const SHEET_COLUMNS = ALL_COLUMNS.filter((c) => SHOW_MONEY || !MONEY_KEYS.includes(c.key));
+const MONEY_HEADERS = ALL_COLUMNS.filter((c) => MONEY_KEYS.includes(c.key)).map((c) => c.header);
+const dropMoney = <T extends Record<string, unknown>>(row: T) =>
+  SHOW_MONEY ? row : (Object.fromEntries(Object.entries(row).filter(([k]) => !MONEY_HEADERS.includes(k))) as T);
+/** Drops the price cells from a positional example row */
+const dropMoneyCells = (row: unknown[]) => (SHOW_MONEY ? row : row.filter((_, i) => !MONEY_KEYS.includes(ALL_COLUMNS[i].key)));
+
 export const UNITS = ['Piece', 'Box', 'Packet', 'Kg', 'Liter', 'Meter', 'Coil', 'Set', 'Pair', 'Bucket', 'Roll', 'Feet', 'Bag', 'Can'];
 
-const rowFor = (p: Product, storeName: string, stock: number) => ({
+const rowFor = (p: Product, storeName: string, stock: number) => dropMoney({
   'Product Name': p.name,
   Brand: p.brand,
   Category: p.category,
@@ -85,7 +94,7 @@ export async function downloadSampleSheet(stores: Store[]) {
     ['Bosch 8mm Drill Bit for Concrete', 'Bosch', 'Tools & Accessories', 'Drill Bits', 'DRL-BOS-8MM', 'Piece', other, 40, 5, 10, 120, 180, 'Bosch India Ltd', 'B-12', ''],
     ['Asian Paints Primer White 4L', 'Asian Paints', 'Paint & Coatings', 'Primers', 'PNT-AP-PRIM-4L', 'Bucket', main, 12, 4, 8, 450, 620, 'Asian Paints Depot', 'P-04', '']
   ];
-  const sheet = XLSX.utils.aoa_to_sheet([SHEET_COLUMNS.map((c) => c.header), ...examples]);
+  const sheet = XLSX.utils.aoa_to_sheet([SHEET_COLUMNS.map((c) => c.header), ...examples.map(dropMoneyCells)]);
   sheet['!cols'] = widths();
   sheet['!freeze'] = { xSplit: 1, ySplit: 1 };
 

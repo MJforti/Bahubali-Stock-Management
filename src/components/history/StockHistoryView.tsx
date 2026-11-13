@@ -1,3 +1,4 @@
+import { SHOW_MONEY } from '../ui/stock';
 import React, { useMemo, useState } from 'react';
 import {
   Search,
@@ -129,7 +130,7 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
       user: e.user,
       role: e.role,
       section: e.category,
-      searchText: [e.summary, e.user, e.product_name, ...(e.details || []), ...(e.changes || []).map((c) => `${c.field} ${c.from} ${c.to}`)]
+      searchText: [e.summary, e.user, e.product_name, ...(e.details || []), ...visibleChanges(e.changes).map((c) => `${c.field} ${c.from} ${c.to}`)]
         .join(' ')
         .toLowerCase(),
       entry: e
@@ -411,7 +412,7 @@ const ActivityRow: React.FC<{ entry: ActivityEntry; product?: Product }> = ({ en
         <p className="mt-0.5 text-sm text-slate-500">
           <Who user={entry.user} role={entry.role} />
         </p>
-        {entry.changes && entry.changes.length > 0 && <Changes changes={entry.changes} />}
+        {visibleChanges(entry.changes).length > 0 && <Changes changes={visibleChanges(entry.changes)} />}
         {entry.details && entry.details.length > 0 && (
           <ul className="mt-2 space-y-0.5 text-sm text-slate-400">
             {entry.details.map((d, i) => (
@@ -423,6 +424,9 @@ const ActivityRow: React.FC<{ entry: ActivityEntry; product?: Product }> = ({ en
     </div>
   );
 };
+
+// Price lines stay hidden while money is hidden
+const visibleChanges = (c?: FieldChange[]) => (c || []).filter((x) => SHOW_MONEY || !['Cost price', 'Selling price'].includes(x.field));
 
 const Changes: React.FC<{ changes: FieldChange[] }> = ({ changes }) => (
   <dl className="mt-2 rounded-lg border border-slate-800 bg-slate-950 divide-y divide-slate-800 text-sm">

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, Plus, Upload, Download, ArrowDownToLine, ArrowUpFromLine, X, FileText } from 'lucide-react';
 import { Product, UserRole } from '../../types/inventory';
 import { ProductThumb } from '../ui/ProductThumb';
-import { formatPrice, formatQty, stockDotClass, stockLabel, stockState, stockTextClass } from '../ui/stock';
+import { formatPrice, SHOW_MONEY, formatQty, stockDotClass, stockLabel, stockState, stockTextClass } from '../ui/stock';
 
 interface ProductListViewProps {
   products: Product[];
@@ -218,7 +218,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
                   </p>
                   <p className="mt-1 text-xs text-slate-500">{product.unit}</p>
                   {state === 'ok' ? (
-                    <p className="mt-1.5 text-xs text-slate-400">{formatPrice(product.selling_price)}</p>
+                    SHOW_MONEY ? <p className="mt-1.5 text-xs text-slate-400">{formatPrice(product.selling_price)}</p> : null
                   ) : (
                     <p className={`mt-1.5 flex items-center justify-end gap-1.5 text-xs ${stockTextClass[state]}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${stockDotClass[state]}`} />

@@ -15,7 +15,7 @@ import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight,
   History
 } from 'lucide-react';
 import { ProductPhoto } from '../ui/ProductThumb';
-import { formatPrice } from '../ui/stock';
+import { formatPrice, SHOW_MONEY } from '../ui/stock';
 import { ALL_STORES, StoreScope, stockIn, stockMap } from '../../lib/stores';
 import { MAIN_STORE_ID, Product, StockTransaction, Store, UserRole } from '../../types/inventory';
 
@@ -205,8 +205,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           <dl className="rounded-xl border border-slate-800 bg-slate-950 divide-y divide-slate-800 text-sm">
             {[
               ['Rack', product.rack ? <span className="rack-tag">{product.rack}</span> : <span className="text-slate-500">Not set</span>],
-              ['Selling price', <span className="text-slate-100">{formatPrice(product.selling_price)}</span>],
-              ['Cost price', <span className="text-slate-300">{formatPrice(product.purchase_price)}</span>],
+              ...(SHOW_MONEY
+                ? [
+                    ['Selling price', <span className="text-slate-100">{formatPrice(product.selling_price)}</span>],
+                    ['Cost price', <span className="text-slate-300">{formatPrice(product.purchase_price)}</span>]
+                  ]
+                : []),
               ['Supplier', <span className="text-slate-300">{product.supplier || 'Not set'}</span>],
               ['SKU', <span className="font-mono text-xs text-slate-400">{product.sku}</span>],
               ['Last changed', <span className="text-slate-400">{new Date(product.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>]

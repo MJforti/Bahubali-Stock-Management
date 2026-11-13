@@ -31,6 +31,12 @@ export function formatQty(n: number) {
   return Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 }
 
+/**
+ * Prices and money figures are hidden for now (owner's request). Stored
+ * prices are kept; set this to true to show them everywhere again.
+ */
+export const SHOW_MONEY = false;
+
 export function formatPrice(n: number) {
   return `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }

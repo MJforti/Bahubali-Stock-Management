@@ -27,6 +27,14 @@ Use this file to hand the project to another AI coding agent, or to a developer.
 
 ## 1. What the app does
 
+> **Money is hidden for now (owner's request).** `SHOW_MONEY = false` in `src/components/ui/stock.ts` hides every price and money figure:
+> - prices in the product list, product details, the product form and the data sheet;
+> - stock value on the Overview, where "Stock value by category" becomes "Stock by category" in units;
+> - money in the PDF report and in Excel exports, sample sheets and imports;
+> - price changes in History.
+>
+> The prices already stored stay in the database. Set the flag to `true` to bring all of it back. Anything that mentions prices or value below applies only when the flag is on.
+
 - **Stock register** for products. A product has:
   - name, brand, SKU, category, unit, rack location
   - cost price and selling price
@@ -226,6 +234,7 @@ The SQL files in `supabase/` have all been applied to the live project, in this 
 13. iPhone alerts re-register after app updates. Confirmed working on iPhone (test alert, low stock alert and summary).
 14. PDF stock report. Works on iPhone.
 15. Overview charts. Work on the owner's phone.
+19. All money hidden behind `SHOW_MONEY = false`; stored prices are kept.
 18. Overview stat row reshaped:
     - one wide lead card: units on shelves, with the product count and stock value at cost;
     - four compact cards: low, out, received today, issued today;

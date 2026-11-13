@@ -2,7 +2,7 @@ import React from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, PackagePlus, Search, Plus, ChevronRight } from 'lucide-react';
 import { Product, StockTransaction, UserRole } from '../../types/inventory';
 import { ProductThumb } from '../ui/ProductThumb';
-import { formatQty, stockState, stockTextClass } from '../ui/stock';
+import { formatQty, stockState, stockTextClass, SHOW_MONEY } from '../ui/stock';
 import { OverviewCharts, StoreFigure } from './OverviewCharts';
 
 interface DashboardViewProps {
@@ -97,7 +97,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <p className="text-[40px] leading-none font-semibold tabular-nums text-slate-100">{formatQty(totalUnits)}</p>
             <div className="text-right text-sm">
               <p className="text-slate-200 tabular-nums">{formatQty(active.length)} products</p>
-              <p className="mt-0.5 text-slate-500 tabular-nums">{inr(stockValue)} at cost</p>
+              {SHOW_MONEY && <p className="mt-0.5 text-slate-500 tabular-nums">{inr(stockValue)} at cost</p>}
             </div>
           </div>
         </div>
