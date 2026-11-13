@@ -346,7 +346,7 @@ export const InventoryDataSheet: React.FC<InventoryDataSheetProps> = ({
           onClick={() => setEnlargedImage(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-pointer"
         >
-          <div className="relative max-w-lg max-h-[80vh] rounded-2xl bg-slate-900 border border-slate-800 p-2 overflow-hidden shadow-2xl">
+          <div className="relative max-w-lg max-h-[80vh] rounded-2xl bg-slate-900 border border-slate-800 p-2 overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.32)]">
             <img src={enlargedImage} alt="Product Photo" className="w-full h-full object-contain max-h-[75vh]" />
             <button
               onClick={() => setEnlargedImage(null)}

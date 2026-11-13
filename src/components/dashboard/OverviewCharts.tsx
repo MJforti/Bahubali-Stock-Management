@@ -3,13 +3,16 @@ import { Product, StockTransaction } from '../../types/inventory';
 import { formatQty, stockState } from '../ui/stock';
 
 /*
- * Overview charts. Colours (validated for the dark surface):
- *   stock in  #3987e5 (blue)   stock out #d95926 (orange)
+ * Overview charts, in the app's own palette: graphite plus the amber accent.
+ *   stock out = amber (the thing that matters), stock in = graphite grey
+ *   (CVD separation checked: ΔE ~28 on the dark surface; legend + tooltip label both)
+ *   ranked bars: grey, with the top row in amber
  *   status: ok #0ca30c, low #fab219, out #d03b3b (always with a label)
  * Text never wears a series colour; marks carry the colour.
  */
-const IN = '#3987e5';
-const OUT = '#d95926';
+const IN = '#85858b';
+const OUT = '#f59e0b';
+const BAR = '#5f5f65';
 const STATUS = { ok: '#0ca30c', low: '#fab219', out: '#d03b3b' };
 
 const rs = (n: number) =>
@@ -79,7 +82,15 @@ const DailyFlow: React.FC<{ transactions: StockTransaction[] }> = ({ transaction
   })();
   const totalIn = days.reduce((a, d) => a + d.in, 0);
   const totalOut = days.reduce((a, d) => a + d.out, 0);
-  const H = 160;
+  // Taller on wide screens, where it sits beside the Stock health card
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1280px)');
+    const on = () => setWide(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const H = wide ? 236 : 160;
   const shown = hover ?? null;
   const label = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
@@ -97,14 +108,14 @@ const DailyFlow: React.FC<{ transactions: StockTransaction[] }> = ({ transaction
     >
       <div className="relative" onMouseLeave={() => setHover(null)}>
         {/* gridlines */}
-        <div className="absolute inset-x-0 top-0" style={{ height: H }}>
+        <div className="absolute left-0 right-0 top-0" style={{ height: H }}>
           {[1, 0.5].map((f) => (
-            <div key={f} className="absolute inset-x-0 border-t border-slate-800" style={{ top: H - H * f }}>
-              <span className="absolute right-0 -top-4 text-[11px] text-slate-600">{formatQty(nice * f)}</span>
+            <div key={f} className="absolute left-8 right-0 border-t border-slate-800" style={{ top: H - H * f }}>
+              <span className="absolute -left-8 -top-[7px] w-7 text-right text-[11px] tabular-nums text-slate-500">{formatQty(nice * f)}</span>
             </div>
           ))}
         </div>
-        <div className="relative flex items-end gap-1 sm:gap-1.5" style={{ height: H }} role="img" aria-label={`Stock in and out for the last ${DAYS} days`}>
+        <div className="relative ml-8 flex items-end gap-1 sm:gap-1.5" style={{ height: H }} role="img" aria-label={`Stock in and out for the last ${DAYS} days`}>
           {days.map((d, i) => (
             <button
               key={d.key}
@@ -120,8 +131,8 @@ const DailyFlow: React.FC<{ transactions: StockTransaction[] }> = ({ transaction
             </button>
           ))}
         </div>
-        <div className="mt-1 border-t border-slate-700" />
-        <div className="mt-1.5 flex justify-between text-[11px] text-slate-500">
+        <div className="ml-8 mt-1 border-t border-slate-700" />
+        <div className="ml-8 mt-1.5 flex justify-between text-[11px] text-slate-500">
           <span>{label(days[0].date)}</span>
           <span>{label(days[Math.floor(DAYS / 2)].date)}</span>
           <span>Today</span>
@@ -129,8 +140,8 @@ const DailyFlow: React.FC<{ transactions: StockTransaction[] }> = ({ transaction
 
         {shown !== null && (
           <div
-            className="pointer-events-none absolute -top-2 z-10 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs shadow-lg"
-            style={{ left: `clamp(0px, calc(${((shown + 0.5) / DAYS) * 100}% - 60px), calc(100% - 120px))`, width: 120 }}
+            className="pointer-events-none absolute -top-2 z-10 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs"
+            style={{ left: `clamp(32px, calc(32px + (100% - 32px) * ${(shown + 0.5) / DAYS} - 60px), calc(100% - 120px))`, width: 120 }}
           >
             <p className="text-slate-300">{i18nDay(days[shown].date)}</p>
             <p className="mt-1 flex items-center justify-between gap-2 text-slate-100">
@@ -152,6 +163,9 @@ const i18nDay = (d: Date) => d.toLocaleDateString('en-IN', { weekday: 'short', d
 
 /** Products by stock state: one segmented bar, labelled. */
 const Health: React.FC<{ products: Product[] }> = ({ products }) => {
+  const need = products
+    .filter((p) => stockState(p) !== 'ok')
+    .sort((a, b) => Number(a.current_stock) - Number(b.current_stock) || a.name.localeCompare(b.name));
   const counts = { ok: 0, low: 0, out: 0 };
   for (const p of products) counts[stockState(p)]++;
   const total = products.length || 1;
@@ -180,17 +194,34 @@ const Health: React.FC<{ products: Product[] }> = ({ products }) => {
           </li>
         ))}
       </ul>
+      {need.length > 0 && (
+        <div className="mt-5">
+          <p className="text-sm text-slate-400">Needs restock</p>
+          <ul className="mt-2 divide-y divide-slate-800">
+            {need.slice(0, 4).map((p) => (
+              <li key={p.id} className="flex items-center gap-2.5 py-2 text-sm">
+                <span className="w-2 h-2 shrink-0 rounded-full" style={{ background: STATUS[stockState(p)] }} />
+                <span className="flex-1 min-w-0 truncate text-slate-200">{p.name}</span>
+                <span className="shrink-0 tabular-nums text-slate-400">
+                  {formatQty(p.current_stock)} <span className="text-slate-600">/ {formatQty(p.minimum_stock)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {need.length > 4 && <p className="mt-1 text-xs text-slate-500">and {need.length - 4} more in To reorder below</p>}
+        </div>
+      )}
     </Card>
   );
 };
 
 /** Horizontal bars with the value at the end. */
-const Bars: React.FC<{ rows: { label: string; value: number; text: string; sub?: string }[]; color: string; empty: string }> = ({ rows, color, empty }) => {
+const Bars: React.FC<{ rows: { label: string; value: number; text: string; sub?: string }[]; empty: string }> = ({ rows, empty }) => {
   if (!rows.length) return <p className="py-6 text-center text-sm text-slate-500">{empty}</p>;
   const max = Math.max(...rows.map((r) => r.value), 1);
   return (
     <ul className="space-y-3">
-      {rows.map((r) => (
+      {rows.map((r, i) => (
         <li key={r.label}>
           <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="min-w-0 truncate text-slate-300">{r.label}</span>
@@ -200,7 +231,7 @@ const Bars: React.FC<{ rows: { label: string; value: number; text: string; sub?:
             </span>
           </div>
           <div className="mt-1.5 h-2 rounded-full bg-slate-800">
-            <div className="h-full rounded-full" style={{ width: `${Math.max(2, (r.value / max) * 100)}%`, background: color }} />
+            <div className="h-full rounded-full" style={{ width: `${Math.max(2, (r.value / max) * 100)}%`, background: i === 0 ? OUT : BAR }} />
           </div>
         </li>
       ))}
@@ -248,7 +279,6 @@ export const OverviewCharts: React.FC<Props> = ({ products, transactions, stores
 
       <Card title="Stock value by category" note={`${rs(totalValue)} at cost price`} className="xl:col-span-2">
         <Bars
-          color={IN}
           empty="Add cost prices to see stock value"
           rows={byCategory.map(([c, v]) => ({ label: c, value: v, text: rs(v), sub: totalValue ? `${Math.round((v / totalValue) * 100)}%` : undefined }))}
         />
@@ -256,7 +286,6 @@ export const OverviewCharts: React.FC<Props> = ({ products, transactions, stores
 
       <Card title="Most taken out" note="Last 30 days" className="xl:col-span-3">
         <Bars
-          color={OUT}
           empty="No stock out in the last 30 days"
           rows={topOut.map(({ p, q }) => ({ label: p!.name, value: q, text: formatQty(q), sub: String(p!.unit || '') }))}
         />
@@ -265,7 +294,6 @@ export const OverviewCharts: React.FC<Props> = ({ products, transactions, stores
       {stores.length > 1 && (
         <Card title="Stock by store" note="Units on shelves and their value at cost" className="xl:col-span-5">
           <Bars
-            color={IN}
             empty="No stock recorded in any store"
             rows={stores.map((s) => ({ label: s.name, value: s.units, text: `${formatQty(s.units)} units`, sub: rs(s.value) }))}
           />

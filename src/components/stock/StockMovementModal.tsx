@@ -125,7 +125,7 @@ export const StockMovementModal: React.FC<StockMovementModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.32)] animate-in fade-in zoom-in-95">
         
         {/* Header with Type Selector */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">

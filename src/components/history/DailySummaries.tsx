@@ -134,7 +134,8 @@ export const DailySummaries: React.FC = () => {
                         </p>
                       )}
                       {s.restock.length > 0 && (
-                        <p className="mt-1 text-sm text-amber-400/90">
+                        <p className="mt-1 text-sm text-slate-300">
+                          <span className="inline-block w-1.5 h-1.5 mr-2 mb-[2px] rounded-full bg-amber-500 align-middle" />
                           Restock{s.out_of_stock ? ` · ${s.out_of_stock} out` : ''}
                           {s.low ? ` · ${s.low} low` : ''}: <span className="text-slate-400">{s.restock.slice(0, 5).join(', ')}{s.restock.length > 5 ? ` +${s.restock.length - 5}` : ''}</span>
                         </p>

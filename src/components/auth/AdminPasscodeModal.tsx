@@ -49,7 +49,7 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6 relative animate-in fade-in zoom-in-95">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-[0_8px_24px_rgba(0,0,0,0.32)] space-y-6 relative animate-in fade-in zoom-in-95">
         
         {/* Close Button */}
         <div className="flex items-start justify-between gap-3">

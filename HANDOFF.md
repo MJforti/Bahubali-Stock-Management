@@ -15,7 +15,7 @@ Use this file to hand the project to another AI coding agent, or to a developer.
 > 2. **The owner does not want to deal with the database.** Make every database change yourself (Supabase SQL / migrations). Keep it readable: clear table names, views with plain column names, and comments.
 > 3. **After every change:** run `npm run build`, which must pass. Commit with a clear message, push, and merge into `main` (fast-forward). The owner said "always merge it, never ask". Vercel deploys `main` automatically.
 > 4. **Keep it working offline.** Every feature has to work with no internet and sync later. The phone's own database (IndexedDB) is what the app reads and writes. Supabase is the shared copy the phones sync with.
-> 5. **Dark theme only.** Keep the existing look: graphite greys, one amber accent, lucide icons, no gradients or emoji. Copy is plain, short and sentence case.
+> 5. **Dark theme only.** Keep the existing look: graphite greys, one amber accent, lucide icons, no gradients or emoji. Copy is plain, short and sentence case. Charts use amber for the thing that matters and grey for the rest. Text never wears a chart colour. Dark windows get a small neutral shadow, never `shadow-2xl`. The `unslop` skill in `.claude/skills/unslop` holds the design rules.
 > 6. **Design for phones first.** Check every screen at 390px wide. Tap targets should be at least 44px.
 > 7. **Tell the truth about testing.** If you couldn't test something, such as a real phone notification, say so.
 > 8. Don't put any model or AI names in commits or code.
@@ -49,14 +49,16 @@ Use this file to hand the project to another AI coding agent, or to a developer.
   - Every action is logged with who did it and when.
 - **Overview charts** (`src/components/dashboard/OverviewCharts.tsx`):
   - Stock in and out per day for the last 14 days; tap or hover a day for its figures.
-  - Stock health: in stock / low / out, as a labelled bar.
+  - Stock health: in stock / low / out, as a labelled bar, plus a short "Needs restock" list.
   - Stock value by category at cost price.
   - Most taken out in the last 30 days.
   - Stock by store, shown only for All stores with more than one store.
   - Drawn with plain SVG/HTML (no chart library) and follows the selected store.
-  - Colours, already checked for colour-blind separation on the dark surface:
-    - stock in `#3987e5` (blue), stock out `#d95926` (orange);
+  - Colours follow the app's palette (graphite plus the amber accent):
+    - stock out in amber `#f59e0b`, stock in in grey `#85858b`; colour-blind separation checked;
+    - ranked bars are grey `#5f5f65` with the top row in amber;
     - status: ok `#0ca30c`, low `#fab219`, out `#d03b3b`, always shown with a text label.
+  - The y-axis labels sit in a left gutter, so the day tooltip never covers them. The chart is taller from 1280px wide.
 - **PDF stock report** (`src/services/pdfReport.ts`, using jsPDF and jspdf-autotable, loaded only when needed):
   - "PDF report" button in Products and in the Data sheet, for staff and admin.
   - Follows the selected store. All stores gets one column per store, in landscape.
@@ -224,6 +226,12 @@ The SQL files in `supabase/` have all been applied to the live project, in this 
 13. iPhone alerts re-register after app updates. Confirmed working on iPhone (test alert, low stock alert and summary).
 14. PDF stock report. Works on iPhone.
 15. Overview charts. Work on the owner's phone.
+17. Third unslop pass (polish):
+    - charts moved to amber and graphite;
+    - tooltip no longer covers the axis;
+    - "Needs restock" list added to Stock health;
+    - modal shadows softened;
+    - the "Restock" line in daily summaries is no longer amber text.
 16. Handoff file (this one). `.claude/settings.json` auto-approves Supabase, Vercel and GitHub tool calls.
 
 ## 8. How to verify changes
