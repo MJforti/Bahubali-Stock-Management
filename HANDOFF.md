@@ -239,19 +239,20 @@ The SQL files in `supabase/` have all been applied to the live project, in this 
 13. iPhone alerts re-register after app updates. Confirmed working on iPhone (test alert, low stock alert and summary).
 14. PDF stock report. Works on iPhone.
 15. Overview charts. Work on the owner's phone.
-20. Overview stat cards open the matching filtered Products or History list.
-19. All money hidden behind `SHOW_MONEY = false`; stored prices are kept.
-18. Overview stat row reshaped:
-    - one wide lead card: units on shelves, with the product count and stock value at cost;
-    - four compact cards: low, out, received today, issued today;
-    - the chart shows "No stock in or out" instead of an empty grid.
+16. Handoff file (this one) and `CLAUDE.md`. `.claude/settings.json` auto-approves Supabase, Vercel and GitHub tool calls.
 17. Third unslop pass (polish):
     - charts moved to amber and graphite;
     - tooltip no longer covers the axis;
     - "Needs restock" list added to Stock health;
     - modal shadows softened;
     - the "Restock" line in daily summaries is no longer amber text.
-16. Handoff file (this one). `.claude/settings.json` auto-approves Supabase, Vercel and GitHub tool calls.
+18. Overview stat row reshaped:
+    - one wide lead card: units on shelves, with the product count (and the stock value at cost when money is shown);
+    - four compact cards: low, out, received today, issued today;
+    - the chart shows "No stock in or out" instead of an empty grid.
+    Works on the owner's phone.
+19. All money hidden behind `SHOW_MONEY = false`; stored prices are kept.
+20. Overview stat cards open the matching filtered Products or History list. Works on the owner's phone.
 
 ## 8. How to verify changes
 - `npm run build` must pass.
