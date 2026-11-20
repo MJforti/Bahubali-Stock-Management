@@ -16,6 +16,7 @@ interface DashboardViewProps {
   onOpenStockOut: (product?: Product) => void;
   onOpenAddProduct: () => void;
   onGoToProductsSearch: () => void;
+  onOpenFigure: (target: FigureTarget) => void;
   onSelectProduct: (product: Product) => void;
   storeFigures: StoreFigure[];
 }
@@ -27,13 +28,22 @@ const isToday = (iso: string) => {
   return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
 };
 
-const Stat: React.FC<{ label: string; value: string; note: string; tone?: string }> = ({ label, value, note, tone = 'text-slate-100' }) => (
-  <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-    <p className="text-sm text-slate-400">{label}</p>
+const Stat: React.FC<{ label: string; value: string; note: string; tone?: string; onClick: () => void }> = ({ label, value, note, tone = 'text-slate-100', onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="group text-left rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 hover:border-slate-700 p-4 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+  >
+    <p className="flex items-center justify-between gap-2 text-sm text-slate-400">
+      {label}
+      <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" strokeWidth={1.5} />
+    </p>
     <p className={`mt-2 text-2xl leading-none font-semibold tabular-nums ${tone}`}>{value}</p>
     <p className="mt-2 text-xs text-slate-500">{note}</p>
-  </div>
+  </button>
 );
+
+export type FigureTarget = { tab: 'products'; status: 'ALL' | 'LOW_STOCK' | 'OUT_OF_STOCK' } | { tab: 'history'; stockType: 'IN' | 'OUT' };
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
@@ -48,6 +58,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenStockOut,
   onOpenAddProduct,
   onGoToProductsSearch,
+  onOpenFigure,
   onSelectProduct,
   storeFigures
 }) => {
@@ -91,8 +102,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Figures */}
       <section className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
         {/* Lead figure */}
-        <div className="col-span-2 md:col-span-4 xl:col-span-2 rounded-xl border border-slate-800 bg-slate-900 p-5 flex flex-col justify-between gap-4">
-          <p className="text-sm text-slate-400">Units on shelves</p>
+        <button
+          type="button"
+          onClick={() => onOpenFigure({ tab: 'products', status: 'ALL' })}
+          className="group text-left col-span-2 md:col-span-4 xl:col-span-2 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-850 hover:border-slate-700 p-5 flex flex-col justify-between gap-4 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+        >
+          <p className="flex items-center justify-between gap-2 text-sm text-slate-400">
+            Units on shelves
+            <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" strokeWidth={1.5} />
+          </p>
           <div className="flex items-end justify-between gap-4">
             <p className="text-[40px] leading-none font-semibold tabular-nums text-slate-100">{formatQty(totalUnits)}</p>
             <div className="text-right text-sm">
@@ -100,11 +118,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {SHOW_MONEY && <p className="mt-0.5 text-slate-500 tabular-nums">{inr(stockValue)} at cost</p>}
             </div>
           </div>
-        </div>
-        <Stat label="Low stock" value={formatQty(low.length)} note="At or under minimum" tone={low.length ? 'text-amber-400' : undefined} />
-        <Stat label="Out of stock" value={formatQty(out.length)} note="None left" tone={out.length ? 'text-rose-400' : undefined} />
-        <Stat label="Received today" value={formatQty(unitsIn)} note={movesIn === 1 ? '1 stock in' : `${movesIn} stock ins`} />
-        <Stat label="Issued today" value={formatQty(unitsOut)} note={movesOut === 1 ? '1 stock out' : `${movesOut} stock outs`} />
+        </button>
+        <Stat label="Low stock" value={formatQty(low.length)} note="At or under minimum" tone={low.length ? 'text-amber-400' : undefined} onClick={() => onOpenFigure({ tab: 'products', status: 'LOW_STOCK' })} />
+        <Stat label="Out of stock" value={formatQty(out.length)} note="None left" tone={out.length ? 'text-rose-400' : undefined} onClick={() => onOpenFigure({ tab: 'products', status: 'OUT_OF_STOCK' })} />
+        <Stat label="Received today" value={formatQty(unitsIn)} note={movesIn === 1 ? '1 stock in' : `${movesIn} stock ins`} onClick={() => onOpenFigure({ tab: 'history', stockType: 'IN' })} />
+        <Stat label="Issued today" value={formatQty(unitsOut)} note={movesOut === 1 ? '1 stock out' : `${movesOut} stock outs`} onClick={() => onOpenFigure({ tab: 'history', stockType: 'OUT' })} />
       </section>
 
       {/* Actions */}

@@ -34,6 +34,13 @@ import { AdminPasscodeModal } from './components/auth/AdminPasscodeModal';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  // Filters to open with when an Overview card is tapped (cleared when leaving that tab)
+  const [preset, setPreset] = useState<
+    { tab: 'products'; status: 'ALL' | 'LOW_STOCK' | 'OUT_OF_STOCK' } | { tab: 'history'; stockType: 'IN' | 'OUT' } | null
+  >(null);
+  useEffect(() => {
+    if (preset && preset.tab !== activeTab) setPreset(null);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [userRole, setUserRole] = useState<UserRole>('staff'); // STAFF VIEW BY DEFAULT
   const [currentStaff, setCurrentStaffState] = useState<string | null>(() => getCurrentStaff());
   const [namePickerOpen, setNamePickerOpen] = useState(false);
@@ -549,6 +556,12 @@ export function App() {
             onOpenStockOut={(prod) => handleOpenStockOut(prod)}
             onOpenAddProduct={() => setProductForm({ open: true, product: null })}
             onGoToProductsSearch={() => setActiveTab('products')}
+            onOpenFigure={(target) => {
+              setSearchQuery('');
+              setPreset(target.tab === 'products' ? { tab: 'products', status: target.status } : { tab: 'history', stockType: target.stockType });
+              setActiveTab(target.tab);
+              window.scrollTo({ top: 0 });
+            }}
             onSelectProduct={(prod) => setSelectedProductForDetail(prod)}
             storeFigures={
               scope === ALL_STORES
@@ -567,6 +580,8 @@ export function App() {
 
         {activeTab === 'products' && (
           <ProductListView
+            key={preset?.tab === 'products' ? `preset-${preset.status}` : 'products'}
+            initialStatus={preset?.tab === 'products' ? preset.status : undefined}
             products={scopedProducts}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -586,7 +601,7 @@ export function App() {
         )}
 
         {activeTab === 'history' && (
-          <StockHistoryView transactions={scopedTransactions} allTransactions={transactions} activity={activity} products={products} stores={stores} scopeLabel={scopeLabel} />
+          <StockHistoryView key={preset?.tab === 'history' ? `preset-${preset.stockType}` : 'history'} initialToday={preset?.tab === 'history' ? preset.stockType : undefined} transactions={scopedTransactions} allTransactions={transactions} activity={activity} products={products} stores={stores} scopeLabel={scopeLabel} />
         )}
 
         {activeTab === 'datasheet' && (

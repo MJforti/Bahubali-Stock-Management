@@ -55,6 +55,11 @@ Use this file to hand the project to another AI coding agent, or to a developer.
 - **History tab:**
   - Sections: All, Stock, Products, People and access, Stores and backup, Daily summaries.
   - Every action is logged with who did it and when.
+- **Overview stat cards are links.** Tapping one opens the matching list, with that filter outlined in amber and a "Show all" banner:
+  - Units on shelves → Products, all.
+  - Low stock / Out of stock → Products filtered to those items.
+  - Received today / Issued today → History → Stock, Today, with Stock in or Stock out selected.
+  - How it works: `preset` state in `App.tsx` passes `initialStatus` to `ProductListView` and `initialToday` to `StockHistoryView`, and is cleared when you leave that tab.
 - **Overview charts** (`src/components/dashboard/OverviewCharts.tsx`):
   - Stock in and out per day for the last 14 days; tap or hover a day for its figures.
   - Stock health: in stock / low / out, as a labelled bar, plus a short "Needs restock" list.
@@ -234,6 +239,7 @@ The SQL files in `supabase/` have all been applied to the live project, in this 
 13. iPhone alerts re-register after app updates. Confirmed working on iPhone (test alert, low stock alert and summary).
 14. PDF stock report. Works on iPhone.
 15. Overview charts. Work on the owner's phone.
+20. Overview stat cards open the matching filtered Products or History list.
 19. All money hidden behind `SHOW_MONEY = false`; stored prices are kept.
 18. Overview stat row reshaped:
     - one wide lead card: units on shelves, with the product count and stock value at cost;

@@ -34,6 +34,8 @@ interface StockHistoryViewProps {
   scopeLabel: string;
   /** Every movement (not only this store's), to find the other half of a transfer */
   allTransactions: StockTransaction[];
+  /** Opened from an Overview card: today's stock ins or stock outs */
+  initialToday?: 'IN' | 'OUT';
 }
 
 type Section = 'all' | 'stock' | 'product' | 'people' | 'data' | 'summary';
@@ -96,14 +98,21 @@ interface Row {
 
 const PAGE = 60;
 
-export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions, activity, products, stores, scopeLabel, allTransactions }) => {
+export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions, activity, products, stores, scopeLabel, allTransactions, initialToday }) => {
   const multiStore = stores.filter((st) => st.is_active).length > 1;
   const storeName = (id?: string) => stores.find((st) => st.id === (id || MAIN_STORE_ID))?.name || 'Main Store';
-  const [section, setSection] = useState<Section>('all');
+  const [section, setSection] = useState<Section>(initialToday ? 'stock' : 'all');
   const [query, setQuery] = useState('');
   const [person, setPerson] = useState('ALL');
-  const [period, setPeriod] = useState<Period>('all');
-  const [stockType, setStockType] = useState<'ALL' | 'IN' | 'OUT' | 'ADJUSTMENT'>('ALL');
+  const [period, setPeriod] = useState<Period>(initialToday ? 'today' : 'all');
+  const [stockType, setStockType] = useState<'ALL' | 'IN' | 'OUT' | 'ADJUSTMENT'>(initialToday ?? 'ALL');
+  const [fromOverview, setFromOverview] = useState(!!initialToday);
+  const showAll = () => {
+    setSection('all');
+    setPeriod('all');
+    setStockType('ALL');
+    setFromOverview(false);
+  };
   const [limit, setLimit] = useState(PAGE);
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
@@ -233,6 +242,18 @@ export const StockHistoryView: React.FC<StockHistoryViewProps> = ({ transactions
       <p className="-mt-2 text-sm text-slate-500">{SECTION_HINT[section]}</p>
 
       {section === 'summary' ? <DailySummaries /> : (<>
+      {fromOverview && section === 'stock' && period === 'today' && (stockType === 'IN' || stockType === 'OUT') && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-slate-900 px-4 py-3 text-sm">
+          <span className="flex items-center gap-2.5 text-slate-200">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            {stockType === 'OUT' ? 'Issued today' : 'Received today'}: {visible.length} {visible.length === 1 ? 'entry' : 'entries'}
+          </span>
+          <button onClick={showAll} className="h-8 px-3 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-850 transition-colors">
+            Show all
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <label className="relative block col-span-2">

@@ -17,6 +17,8 @@ interface ProductListViewProps {
   onOpenImportModal: () => void;
   onExportExcel: () => void;
   onExportPdf: () => void;
+  /** Opened from an Overview card: start with this filter and point it out */
+  initialStatus?: 'ALL' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 }
 
 export const ProductListView: React.FC<ProductListViewProps> = ({
@@ -31,11 +33,13 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
   onOpenEditProduct,
   onOpenImportModal,
   onExportExcel,
-  onExportPdf
+  onExportPdf,
+  initialStatus
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
-  const [stockStatusFilter, setStockStatusFilter] = useState<'ALL' | 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK'>('ALL');
+  const [stockStatusFilter, setStockStatusFilter] = useState<'ALL' | 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK'>(initialStatus ?? 'ALL');
+  const [fromOverview, setFromOverview] = useState(!!initialStatus && initialStatus !== 'ALL');
 
   // Categories & Brands list computation
   const categories = useMemo(() => {
@@ -179,9 +183,14 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
             {statusFilters.map((f) => (
               <button
                 key={f.id}
-                onClick={() => setStockStatusFilter(f.id)}
+                onClick={() => {
+                  setStockStatusFilter(f.id);
+                  setFromOverview(false);
+                }}
                 className={`h-7 px-2.5 rounded-md text-sm transition-colors ${
-                  stockStatusFilter === f.id ? 'bg-slate-850 text-slate-100' : 'text-slate-500 hover:text-slate-200'
+                  stockStatusFilter === f.id
+                    ? `bg-slate-850 text-slate-100 ${fromOverview ? 'ring-1 ring-amber-500/70' : ''}`
+                    : 'text-slate-500 hover:text-slate-200'
                 }`}
               >
                 {f.label}
@@ -190,6 +199,24 @@ export const ProductListView: React.FC<ProductListViewProps> = ({
           </div>
         </div>
       </div>
+
+      {fromOverview && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-slate-900 px-4 py-3 text-sm">
+          <span className="flex items-center gap-2.5 text-slate-200">
+            <span className={`w-2 h-2 rounded-full ${stockStatusFilter === 'OUT_OF_STOCK' ? 'bg-rose-500' : 'bg-amber-500'}`} />
+            {stockStatusFilter === 'OUT_OF_STOCK' ? 'Out of stock' : 'Low stock'}: {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'}
+          </span>
+          <button
+            onClick={() => {
+              setStockStatusFilter('ALL');
+              setFromOverview(false);
+            }}
+            className="h-8 px-3 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-850 transition-colors"
+          >
+            Show all
+          </button>
+        </div>
+      )}
 
       {/* Product rows: photo first, then name, then stock */}
       <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2">
