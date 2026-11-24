@@ -253,6 +253,7 @@ The SQL files in `supabase/` have all been applied to the live project, in this 
     Works on the owner's phone.
 19. All money hidden behind `SHOW_MONEY = false`; stored prices are kept.
 20. Overview stat cards open the matching filtered Products or History list. Works on the owner's phone.
+21. Added `README.md` (project overview, setup, structure) and an MIT `LICENSE`. No app changes.
 
 ## 8. How to verify changes
 - `npm run build` must pass.
